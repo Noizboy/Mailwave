@@ -102,7 +102,6 @@ describe("buildSystemPrompt", () => {
       tone: "friendly",
       language: "Spanish",
       emailLength: "short",
-      extraInstructions: "Mention the free trial",
     });
     expect(prompt).toContain("Campaign Goal: Book demos");
     expect(prompt).toContain("Product/Service: MailWave");
@@ -110,7 +109,6 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Tone: friendly");
     expect(prompt).toContain("Language: Spanish");
     expect(prompt).toContain("1-2 paragraphs");
-    expect(prompt).toContain("Additional Instructions: Mention the free trial");
   });
 
   it("omits null fields and defaults tone to professional", () => {

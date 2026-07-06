@@ -15,7 +15,6 @@ const createSchema = z.object({
   tone: z.string().optional(),
   language: z.string().default("en"),
   emailLength: z.string().default("medium"),
-  extraInstructions: z.string().optional(),
   systemPrompt: z.string().default(""),
   intervalType: z.enum(["fixed", "random"]).default("random"),
   minInterval: z.number().int().min(1).default(3),
@@ -26,8 +25,6 @@ const createSchema = z.object({
   ),
   aiProvider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom"]).optional(),
   aiModel: z.string().optional(),
-  senderName: z.string().optional(),
-  senderGender: z.enum(["male", "female", ""]).optional(),
   status: z.enum(["pending"]).default("pending"),
 });
 

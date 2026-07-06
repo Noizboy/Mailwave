@@ -46,7 +46,6 @@ const baseCampaign = {
   tone: null,
   language: "English",
   emailLength: "medium",
-  extraInstructions: null,
   aiProvider: null,
   aiModel: null,
   status: "pending",

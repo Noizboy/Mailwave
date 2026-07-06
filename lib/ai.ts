@@ -21,10 +21,12 @@ export interface AiGenerationResult {
 export async function generateEmail(input: AiGenerationInput): Promise<AiGenerationResult> {
   const fullPrompt = `${input.userPrompt}
 
+CRITICAL: Write the actual, ready-to-send email. NEVER use placeholder text anywhere in the body — not [Your Name], [Your Company], [Your Contact Information], [Tu nombre], [Tu empresa], [Tu información de contacto], or any bracket placeholder. Use the real sender name from the instructions, or omit the field entirely.
+
 Respond with ONLY a JSON object in this exact format (no markdown, no code fences):
 {
   "subject": "The email subject line",
-  "body": "The full email body in plain text. Use \\n for newlines.",
+  "body": "The complete, ready-to-send email body with no placeholders. Use \\n for newlines.",
   "personalizationNotes": "Brief note on how this email was personalized for this contact"
 }`;
 
@@ -87,35 +89,24 @@ export function buildSystemPrompt(campaignContext: {
   tone?: string | null;
   language: string;
   emailLength: string;
-  extraInstructions?: string | null;
   basePrompt?: string | null;
-  senderName?: string | null;
-  senderGender?: string | null;
 }): string {
-  const genderNote =
-    campaignContext.senderGender === "male"
-      ? "The sender is male — use masculine voice and masculine gendered endings (e.g. -o in Spanish: 'estoy listo', 'soy el encargado')."
-      : campaignContext.senderGender === "female"
-      ? "The sender is female — use feminine voice and feminine gendered endings (e.g. -a in Spanish: 'estoy lista', 'soy la encargada')."
-      : null;
+  const resolvedBasePrompt = campaignContext.basePrompt ?? "You are an expert cold email copywriter. Write personalized, compelling emails that feel human and are tailored specifically to the recipient.";
 
-  const footerNote = campaignContext.senderName
-    ? `Email signature: ${campaignContext.senderName} — always close the email with this name as the signature.`
-    : null;
+  const campaignRequirements = [
+    campaignContext.goal ? `- Goal: ${campaignContext.goal}` : null,
+    campaignContext.product ? `- Product/Service: ${campaignContext.product}` : null,
+    campaignContext.cta ? `- Primary CTA: ${campaignContext.cta}` : null,
+    `- Tone: ${campaignContext.tone ?? "professional"}`,
+    `- Language: ${campaignContext.language}`,
+    `- Email Length: ${campaignContext.emailLength} — ${emailLengthGuide(campaignContext.emailLength)}`,
+  ].filter(Boolean).join("\n");
 
   const parts = [
-    campaignContext.basePrompt ?? "You are an expert cold email copywriter. Write personalized, compelling emails that feel human and are tailored specifically to the recipient.",
-    campaignContext.goal ? `Campaign Goal: ${campaignContext.goal}` : null,
-    campaignContext.product ? `Product/Service: ${campaignContext.product}` : null,
-    campaignContext.cta ? `Primary CTA: ${campaignContext.cta}` : null,
-    `Tone: ${campaignContext.tone ?? "professional"}`,
-    `Language: ${campaignContext.language}`,
-    `Email Length: ${campaignContext.emailLength} — ${emailLengthGuide(campaignContext.emailLength)}`,
-    genderNote,
-    footerNote,
-    campaignContext.extraInstructions ? `Additional Instructions: ${campaignContext.extraInstructions}` : null,
-    "Never use generic openers like 'I hope this email finds you well'. Make it specific to the recipient.",
-    "Use the contact's information to make the email feel personally written for them.",
+    resolvedBasePrompt,
+    `\nThese campaign requirements MUST be followed exactly — they take priority over any style guidance above:\n${campaignRequirements}`,
+    "- Never use generic openers like 'I hope this email finds you well'. Make it specific to the recipient.",
+    "- Use the contact's information to make the email feel personally written for them.",
   ]
     .filter(Boolean)
     .join("\n");

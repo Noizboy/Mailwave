@@ -111,8 +111,6 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
     language: campaign.language,
     emailLength: campaign.emailLength,
     basePrompt: campaign.systemPrompt,
-    senderName: campaign.senderName,
-    senderGender: campaign.senderGender,
   });
 
   let successCount = 0;

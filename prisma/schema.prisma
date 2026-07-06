@@ -154,10 +154,7 @@ model Campaign {
   tone              String?
   language          String          @default("en")
   emailLength       String          @default("medium")
-  extraInstructions String?
   systemPrompt      String?
-  senderName        String?
-  senderGender      String?
   intervalType      IntervalType    @default(random)
   minInterval       Int             @default(3)
   maxInterval       Int             @default(8)

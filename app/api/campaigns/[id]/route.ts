@@ -44,7 +44,6 @@ const patchSchema = z.object({
   tone: z.string().optional(),
   language: z.string().optional(),
   emailLength: z.string().optional(),
-  extraInstructions: z.string().optional(),
   systemPrompt: z.string().optional(),
   intervalType: z.enum(["fixed", "random"]).optional(),
   minInterval: z.number().int().min(1).optional(),
@@ -52,8 +51,6 @@ const patchSchema = z.object({
   aiProvider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom"]).nullable().optional(),
   aiModel: z.string().nullable().optional(),
   scheduledAt: z.string().datetime().nullable().optional(),
-  senderName: z.string().optional(),
-  senderGender: z.enum(["male", "female", ""]).optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

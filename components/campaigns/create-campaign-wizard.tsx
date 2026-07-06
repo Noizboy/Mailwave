@@ -34,8 +34,6 @@ interface CampaignForWizard {
   language?: string | null;
   emailLength?: string | null;
   systemPrompt?: string | null;
-  senderName?: string | null;
-  senderGender?: string | null;
   intervalType: string;
   minInterval: number;
   maxInterval: number;
@@ -53,9 +51,7 @@ const wizardSchema = z.object({
   tone: z.string().optional(),
   language: z.string(),
   emailLength: z.string(),
-  systemPrompt: z.string().min(1, "System prompt is required"),
-  senderName: z.string().optional(),
-  senderGender: z.enum(["male", "female", ""]).optional(),
+  systemPrompt: z.string().optional(),
   intervalType: z.enum(["fixed", "random"]),
   minInterval: z.number().int().min(1),
   maxInterval: z.number().int().min(1),
@@ -110,8 +106,6 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
       language: campaign.language ?? "en",
       emailLength: campaign.emailLength ?? "medium",
       systemPrompt: campaign.systemPrompt ?? "",
-      senderName: campaign.senderName ?? "",
-      senderGender: (campaign.senderGender as WizardData["senderGender"]) ?? "",
       intervalType: (campaign.intervalType as "fixed" | "random") ?? "random",
       minInterval: campaign.minInterval ?? 3,
       maxInterval: campaign.maxInterval ?? 8,
@@ -128,8 +122,6 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
       language: "en",
       emailLength: "medium",
       systemPrompt: "",
-      senderName: "",
-      senderGender: "" as WizardData["senderGender"],
       intervalType: "random",
       minInterval: 3,
       maxInterval: 8,
@@ -158,13 +150,11 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
   const tone = useWatch({ control, name: "tone" });
   const language = useWatch({ control, name: "language" });
   const emailLength = useWatch({ control, name: "emailLength" });
-  const senderGender = useWatch({ control, name: "senderGender" });
-
   const selectedList = lists.find((l) => l.id === selectedListId);
 
   const stepFields: Record<number, Array<keyof WizardData>> = {
     1: ["name", "listId"],
-    2: ["goal", "product", "cta", "tone", "language", "emailLength", "systemPrompt", "senderName", "senderGender"],
+    2: ["goal", "product", "cta", "tone", "language", "emailLength", "systemPrompt"],
     3: ["intervalType", "minInterval", "maxInterval", "scheduledAt"],
   };
 
@@ -370,33 +360,14 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
                 </Field>
                 <Field
                   label="System Prompt"
-                  required
-                  description="Instructions sent directly to the AI for every email. Describe the tone, angle, and rules it must follow."
+                  description="Optional. Override or extend the default AI behavior with your own rules."
                   error={errors.systemPrompt?.message}
                 >
                   <Textarea
                     {...register("systemPrompt")}
-                    placeholder="e.g. You are a B2B cold email expert. Write concise, professional emails that lead with a pain point and close with a single CTA to book a demo."
+                    placeholder="e.g. Always open with a reference to the recipient's industry. Never use the phrase 'I hope this email finds you well'."
                     rows={5}
                   />
-                </Field>
-                <Field
-                  label="Firma"
-                  description="Nombre con el que la IA firmará cada email."
-                >
-                  <Input {...register("senderName")} placeholder="e.g. John Smith" />
-                </Field>
-                <Field
-                  label="Género del remitente"
-                  description="Define cómo la IA se refiere al remitente en el email — afecta las terminaciones de vocal (a/o) en el idioma configurado."
-                >
-                  <Select value={senderGender ?? ""} onValueChange={(v) => setValue("senderGender", v as WizardData["senderGender"])}>
-                    <SelectTrigger><SelectValue placeholder="Select gender..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </Field>
               </>
             )}
@@ -527,14 +498,16 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
                       <dd className="text-sm font-medium text-foreground">{value.charAt(0).toUpperCase() + value.slice(1)}</dd>
                     </div>
                   ))}
-                  <div className="col-span-full flex flex-col gap-0.5 border-b border-border/60 pb-2">
-                    <dt className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">
-                      System Prompt
-                    </dt>
-                    <dd className="whitespace-pre-wrap text-sm font-medium text-foreground">
-                      {form.getValues("systemPrompt")}
-                    </dd>
-                  </div>
+                  {form.getValues("systemPrompt") && (
+                    <div className="col-span-full flex flex-col gap-0.5 border-b border-border/60 pb-2">
+                      <dt className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">
+                        System Prompt
+                      </dt>
+                      <dd className="whitespace-pre-wrap text-sm font-medium text-foreground">
+                        {form.getValues("systemPrompt")}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
                 <p className="text-xs text-muted-foreground">
                   {campaign

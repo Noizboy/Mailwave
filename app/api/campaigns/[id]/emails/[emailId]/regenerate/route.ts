@@ -73,7 +73,6 @@ export async function POST(
     tone: campaign.tone,
     language: campaign.language,
     emailLength: campaign.emailLength,
-    extraInstructions: campaign.extraInstructions,
   });
 
   const { contact } = campaignEmail;

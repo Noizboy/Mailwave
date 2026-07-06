@@ -90,9 +90,6 @@ interface CampaignDetail {
   language: string | null;
   emailLength: string | null;
   systemPrompt: string | null;
-  extraInstructions: string | null;
-  senderName: string | null;
-  senderGender: string | null;
   aiProvider: string | null;
   aiModel: string | null;
   intervalType: string;
@@ -195,8 +192,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const [aiLanguage, setAiLanguage] = useState("");
   const [aiEmailLength, setAiEmailLength] = useState("");
   const [aiSystemPrompt, setAiSystemPrompt] = useState("");
-  const [aiSenderName, setAiSenderName] = useState("");
-  const [aiSenderGender, setAiSenderGender] = useState("");
   const [savingAi, setSavingAi] = useState(false);
 
   const { data: campaign, isLoading: campaignLoading } = useQuery({
@@ -412,8 +407,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     setAiLanguage(campaign.language ?? "");
     setAiEmailLength(campaign.emailLength ?? "");
     setAiSystemPrompt(campaign.systemPrompt ?? "");
-    setAiSenderName(campaign.senderName ?? "");
-    setAiSenderGender(campaign.senderGender ?? "");
     setEditAiOpen(true);
   };
 
@@ -427,8 +420,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
         language: aiLanguage || undefined,
         emailLength: aiEmailLength || undefined,
         systemPrompt: aiSystemPrompt || undefined,
-        senderName: aiSenderName || undefined,
-        senderGender: aiSenderGender || undefined,
       }),
     });
     if (res.ok) {
@@ -472,8 +463,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
           language: campaign.language,
           emailLength: campaign.emailLength,
           systemPrompt: campaign.systemPrompt,
-          senderName: campaign.senderName,
-          senderGender: campaign.senderGender,
           intervalType: campaign.intervalType,
           minInterval: campaign.minInterval,
           maxInterval: campaign.maxInterval,
@@ -712,12 +701,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                 </InfoField>
                 <InfoField label="EMAIL LENGTH">
                   {EMAIL_LENGTH_LABELS[campaign.emailLength ?? ""] ?? campaign.emailLength ?? "Medium (100–200 words)"}
-                </InfoField>
-                <InfoField label="FIRMA">
-                  {campaign.senderName ?? <span className="text-muted-foreground">—</span>}
-                </InfoField>
-                <InfoField label="GÉNERO DEL REMITENTE">
-                  {campaign.senderGender === "male" ? "Male" : campaign.senderGender === "female" ? "Female" : <span className="text-muted-foreground">—</span>}
                 </InfoField>
                 {campaign.aiProvider && (
                   <InfoField label="AI PROVIDER">{campaign.aiProvider}</InfoField>
@@ -1093,38 +1076,17 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                     </SelectContent>
                   </Select>
                 </div>
+                <Separator />
                 <div className="space-y-1.5">
                   <Label>System Prompt</Label>
+                  <p className="text-xs text-muted-foreground">Optional. Override or extend the default AI behavior with your own rules.</p>
                   <Textarea
                     value={aiSystemPrompt}
                     onChange={(e) => setAiSystemPrompt(e.target.value)}
-                    placeholder="Custom system prompt for email generation..."
+                    placeholder="e.g. Always open with a reference to the recipient's industry. Never use the phrase 'I hope this email finds you well'."
                     rows={8}
                     className="resize-none overflow-y-auto"
                   />
-                </div>
-                <Separator />
-                <div className="space-y-1.5">
-                  <Label>Firma</Label>
-                  <p className="text-xs text-muted-foreground">Nombre con el que la IA firmará cada email.</p>
-                  <Input
-                    value={aiSenderName}
-                    onChange={(e) => setAiSenderName(e.target.value)}
-                    placeholder="e.g. John Smith"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Género del remitente</Label>
-                  <p className="text-xs text-muted-foreground">Define cómo la IA se refiere al remitente en el email — afecta las terminaciones de vocal (a/o) en el idioma configurado.</p>
-                  <Select value={aiSenderGender} onValueChange={setAiSenderGender}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select gender..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
               <div className="border-t p-6">
