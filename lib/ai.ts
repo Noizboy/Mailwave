@@ -89,7 +89,27 @@ export function buildSystemPrompt(campaignContext: {
   emailLength: string;
   extraInstructions?: string | null;
   basePrompt?: string | null;
+  senderName?: string | null;
+  senderPhone?: string | null;
+  senderGender?: string | null;
 }): string {
+  const genderNote =
+    campaignContext.senderGender === "male"
+      ? "The sender is male — write in a masculine voice."
+      : campaignContext.senderGender === "female"
+      ? "The sender is female — write in a feminine voice."
+      : null;
+
+  const footerParts = [
+    campaignContext.senderName,
+    campaignContext.senderPhone,
+  ].filter(Boolean);
+
+  const footerNote =
+    footerParts.length > 0
+      ? `Email footer/signature: ${footerParts.join(" | ")} — include this at the end of every email.`
+      : null;
+
   const parts = [
     campaignContext.basePrompt ?? "You are an expert cold email copywriter. Write personalized, compelling emails that feel human and are tailored specifically to the recipient.",
     campaignContext.goal ? `Campaign Goal: ${campaignContext.goal}` : null,
@@ -98,6 +118,8 @@ export function buildSystemPrompt(campaignContext: {
     `Tone: ${campaignContext.tone ?? "professional"}`,
     `Language: ${campaignContext.language}`,
     `Email Length: ${campaignContext.emailLength} — ${emailLengthGuide(campaignContext.emailLength)}`,
+    genderNote,
+    footerNote,
     campaignContext.extraInstructions ? `Additional Instructions: ${campaignContext.extraInstructions}` : null,
     "Never use generic openers like 'I hope this email finds you well'. Make it specific to the recipient.",
     "Use the contact's information to make the email feel personally written for them.",
