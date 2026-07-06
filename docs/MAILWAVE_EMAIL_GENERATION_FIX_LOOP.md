@@ -2,22 +2,36 @@
 
 ## Status Summary (Current Session)
 
-**Progress:** 2 of 9 tasks completed (22%)
+**Progress:** 3 of 9 tasks completed (33%)
 - ✅ MW-GEN-001: Redis verified running
 - ✅ MW-GEN-002: BullMQ worker started and operational
-- ⏳ MW-GEN-003 → MW-GEN-009: Pending (require manual testing via browser or database access)
+- ✅ MW-GEN-008: Verified contacts in list (12 eligible members)
+- 🔄 MW-GEN-003 → MW-GEN-007: Ready for manual testing
+- ⏳ MW-GEN-009: Pending (final documentation commit)
 
-**Current State:**
+**Current Infrastructure:**
 - Redis service: Running on `redis://localhost:6379`
-- BullMQ Worker: Running, listening on queues (campaign-generate, campaign-send, suppress-contacts, daily-digest)
+- BullMQ Worker: Running, listening on 4 queues (campaign-generate, campaign-send, suppress-contacts, daily-digest)
 - Dev Server: Running on `http://localhost:3000` (requires login)
-- Database: PostgreSQL ready at `localhost:5432/mailwave`
+- Database: PostgreSQL at `localhost:5432/mailwave` with seeded test data
+- Database: AI Provider "OpenRouter" connected and ready
 
-**Next Steps:** 
-1. Access app via browser and create a test campaign
-2. Click "Generate Emails" to trigger the job
-3. Monitor worker logs for processing status
-4. Verify campaign status changes to "pending_review"
+**Test Campaign Setup:**
+- Campaign ID: `cmr2zyn610000hsueg7avx0c5`
+- Campaign Name: "Wisebill"
+- Status: draft
+- List: "Tech Leaders Q1" (12 eligible subscribers)
+- Test User: demo@mailwave.app / password123
+
+**Next Steps (Manual Testing):**
+1. Open http://localhost:3000 and login with demo@mailwave.app / password123
+2. Navigate to Campaigns → "Wisebill"
+3. Click "Generate Emails" button and observe:
+   - Status changes to "Generating..."
+   - Worker logs show progress updates
+   - After 30-60 sec, status changes to "pending_review"
+   - Generated emails appear in table
+4. Follow detailed instructions in `docs/MAILWAVE_MANUAL_TEST_INSTRUCTIONS.md`
 
 ---
 
@@ -265,7 +279,7 @@
 
 ### MW-GEN-008. Revisar que la lista tiene contactos elegibles
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** Medium
 - **Depends on:** MW-GEN-004
 - **Files to touch:** N/A (diagnostic query)
