@@ -91,6 +91,9 @@ interface CampaignDetail {
   emailLength: string | null;
   systemPrompt: string | null;
   extraInstructions: string | null;
+  senderName: string | null;
+  senderPhone: string | null;
+  senderGender: string | null;
   aiProvider: string | null;
   aiModel: string | null;
   intervalType: string;
@@ -193,6 +196,9 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const [aiLanguage, setAiLanguage] = useState("");
   const [aiEmailLength, setAiEmailLength] = useState("");
   const [aiSystemPrompt, setAiSystemPrompt] = useState("");
+  const [aiSenderName, setAiSenderName] = useState("");
+  const [aiSenderPhone, setAiSenderPhone] = useState("");
+  const [aiSenderGender, setAiSenderGender] = useState("");
   const [savingAi, setSavingAi] = useState(false);
 
   const { data: campaign, isLoading: campaignLoading } = useQuery({
@@ -408,6 +414,9 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     setAiLanguage(campaign.language ?? "");
     setAiEmailLength(campaign.emailLength ?? "");
     setAiSystemPrompt(campaign.systemPrompt ?? "");
+    setAiSenderName(campaign.senderName ?? "");
+    setAiSenderPhone(campaign.senderPhone ?? "");
+    setAiSenderGender(campaign.senderGender ?? "");
     setEditAiOpen(true);
   };
 
@@ -421,6 +430,9 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
         language: aiLanguage || undefined,
         emailLength: aiEmailLength || undefined,
         systemPrompt: aiSystemPrompt || undefined,
+        senderName: aiSenderName || undefined,
+        senderPhone: aiSenderPhone || undefined,
+        senderGender: aiSenderGender || undefined,
       }),
     });
     if (res.ok) {
@@ -464,6 +476,9 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
           language: campaign.language,
           emailLength: campaign.emailLength,
           systemPrompt: campaign.systemPrompt,
+          senderName: campaign.senderName,
+          senderPhone: campaign.senderPhone,
+          senderGender: campaign.senderGender,
           intervalType: campaign.intervalType,
           minInterval: campaign.minInterval,
           maxInterval: campaign.maxInterval,
@@ -506,26 +521,24 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
 
   const nextEmailLabel = getNextEmailLabel(campaign);
 
-  const pendingSendCount = Math.max(
-    0,
-    campaign.totalEmails - campaign.sentCount - campaign.failedCount - campaign.skippedCount
-  );
-
   const stats: Array<{ label: string; value: number; tone: "neutral" | "success" | "destructive" | "warning" }> = [
     { label: "Total Emails", value: campaign.totalEmails, tone: "neutral" },
     { label: "Sent", value: campaign.sentCount, tone: "success" },
     { label: "Failed", value: campaign.failedCount, tone: "destructive" },
-    { label: "Pending", value: pendingSendCount, tone: "warning" },
+    { label: "Pending", value: pendingCount, tone: "warning" },
     { label: "Skipped", value: campaign.skippedCount, tone: "neutral" },
   ];
 
   return (
     <div className="flex flex-col h-full">
-      <TopBar
-        title={campaign.name}
-        actions={
-          <div className="flex items-center gap-2">
+      <TopBar title={campaign.name} />
+      <main className="flex-1 overflow-y-auto p-6">
+        <div className="space-y-6">
+
+          {/* Campaign action bar */}
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={campaign.status} />
+            <div className="flex-1" />
             {isGenerating ? (
               <Button size="sm" disabled variant="outline">
                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -578,10 +591,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
               </>
             )}
           </div>
-        }
-      />
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="space-y-6">
 
           {/* Stats grid */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -709,6 +718,17 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                 <InfoField label="EMAIL LENGTH">
                   {EMAIL_LENGTH_LABELS[campaign.emailLength ?? ""] ?? campaign.emailLength ?? "Medium (100–200 words)"}
                 </InfoField>
+                {campaign.senderName && (
+                  <InfoField label="SENDER NAME">{campaign.senderName}</InfoField>
+                )}
+                {campaign.senderPhone && (
+                  <InfoField label="SENDER PHONE">{campaign.senderPhone}</InfoField>
+                )}
+                {campaign.senderGender && (
+                  <InfoField label="SENDER GENDER">
+                    {campaign.senderGender === "male" ? "Male" : "Female"}
+                  </InfoField>
+                )}
                 {campaign.aiProvider && (
                   <InfoField label="AI PROVIDER">{campaign.aiProvider}</InfoField>
                 )}
@@ -1092,6 +1112,38 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                     rows={8}
                     className="resize-none overflow-y-auto"
                   />
+                </div>
+                <Separator />
+                <div className="space-y-1.5">
+                  <Label>Your Name</Label>
+                  <p className="text-xs text-muted-foreground">Sender name the AI will include in the email footer.</p>
+                  <Input
+                    value={aiSenderName}
+                    onChange={(e) => setAiSenderName(e.target.value)}
+                    placeholder="e.g. John Smith"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Your Phone</Label>
+                  <p className="text-xs text-muted-foreground">Contact phone number for the email footer.</p>
+                  <Input
+                    value={aiSenderPhone}
+                    onChange={(e) => setAiSenderPhone(e.target.value)}
+                    placeholder="e.g. +1 555 000 0000"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Sender Gender</Label>
+                  <p className="text-xs text-muted-foreground">Helps the AI adapt its writing style to the sender's gender.</p>
+                  <Select value={aiSenderGender} onValueChange={setAiSenderGender}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select gender..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="border-t p-6">

@@ -160,11 +160,6 @@ export function TopBar({ title, actions }: TopBarProps) {
           </div>
         </div>
 
-        {/* Status pills */}
-        <div className="hidden items-center gap-2 sm:flex">
-          <StatusPill label="SMTP" connected={smtpConnected} href="/settings?tab=smtp" />
-          <StatusPill label="AI" connected={aiConnected} href="/settings?tab=ai" />
-        </div>
 
         {/* CTA slot */}
         {actions && <div className="shrink-0">{actions}</div>}

@@ -156,6 +156,9 @@ model Campaign {
   emailLength       String          @default("medium")
   extraInstructions String?
   systemPrompt      String?
+  senderName        String?
+  senderPhone       String?
+  senderGender      String?
   intervalType      IntervalType    @default(random)
   minInterval       Int             @default(3)
   maxInterval       Int             @default(8)
