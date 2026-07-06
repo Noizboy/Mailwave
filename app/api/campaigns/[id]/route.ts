@@ -49,8 +49,6 @@ const patchSchema = z.object({
   intervalType: z.enum(["fixed", "random"]).optional(),
   minInterval: z.number().int().min(1).optional(),
   maxInterval: z.number().int().min(1).optional(),
-  generateSubject: z.boolean().optional(),
-  generateBody: z.boolean().optional(),
   aiProvider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom"]).nullable().optional(),
   aiModel: z.string().nullable().optional(),
   scheduledAt: z.string().datetime().nullable().optional(),

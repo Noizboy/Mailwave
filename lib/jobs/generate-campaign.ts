@@ -90,14 +90,14 @@ export async function processGenerate(job: Job<GenerateCampaignJobData>) {
   const model = campaign.aiModel ?? DEFAULT_MODELS[provider] ?? "gpt-4o-mini";
   const baseUrl = aiConfig.baseUrl ?? PROVIDER_BASE_URLS[provider] ?? undefined;
 
-  const systemPrompt = campaign.systemPrompt ?? buildSystemPrompt({
+  const systemPrompt = buildSystemPrompt({
     goal: campaign.goal,
     product: campaign.product,
     cta: campaign.cta,
     tone: campaign.tone,
     language: campaign.language,
     emailLength: campaign.emailLength,
-    extraInstructions: campaign.extraInstructions,
+    basePrompt: campaign.systemPrompt,
   });
 
   let successCount = 0;

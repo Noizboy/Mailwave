@@ -88,9 +88,10 @@ export function buildSystemPrompt(campaignContext: {
   language: string;
   emailLength: string;
   extraInstructions?: string | null;
+  basePrompt?: string | null;
 }): string {
   const parts = [
-    "You are an expert cold email copywriter. Write personalized, compelling emails that feel human and are tailored specifically to the recipient.",
+    campaignContext.basePrompt ?? "You are an expert cold email copywriter. Write personalized, compelling emails that feel human and are tailored specifically to the recipient.",
     campaignContext.goal ? `Campaign Goal: ${campaignContext.goal}` : null,
     campaignContext.product ? `Product/Service: ${campaignContext.product}` : null,
     campaignContext.cta ? `Primary CTA: ${campaignContext.cta}` : null,

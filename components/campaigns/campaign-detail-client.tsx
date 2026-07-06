@@ -98,8 +98,6 @@ interface CampaignDetail {
   intervalType: string;
   minInterval: number;
   maxInterval: number;
-  generateSubject: boolean;
-  generateBody: boolean;
   startedAt: string | null;
   createdAt: string;
   scheduledAt: string | null;
@@ -185,7 +183,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const [aiTone, setAiTone] = useState("");
   const [aiLanguage, setAiLanguage] = useState("");
   const [aiEmailLength, setAiEmailLength] = useState("");
-  const [aiInstructions, setAiInstructions] = useState("");
+  const [aiSystemPrompt, setAiSystemPrompt] = useState("");
   const [savingAi, setSavingAi] = useState(false);
 
   const { data: campaign, isLoading: campaignLoading } = useQuery({
@@ -339,7 +337,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     setAiTone(campaign.tone ?? "");
     setAiLanguage(campaign.language ?? "");
     setAiEmailLength(campaign.emailLength ?? "");
-    setAiInstructions(campaign.extraInstructions ?? "");
+    setAiSystemPrompt(campaign.systemPrompt ?? "");
     setEditAiOpen(true);
   };
 
@@ -352,7 +350,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
         tone: aiTone || undefined,
         language: aiLanguage || undefined,
         emailLength: aiEmailLength || undefined,
-        extraInstructions: aiInstructions || undefined,
+        systemPrompt: aiSystemPrompt || undefined,
       }),
     });
     if (res.ok) {
@@ -402,8 +400,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
           scheduledAt: campaign.scheduledAt,
           aiProvider: campaign.aiProvider,
           aiModel: campaign.aiModel,
-          generateSubject: campaign.generateSubject,
-          generateBody: campaign.generateBody,
         }}
       />
     );
@@ -580,7 +576,9 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
             )}
             {campaign.systemPrompt && (
               <InfoField label="SYSTEM PROMPT">
-                <p className="whitespace-pre-wrap">{campaign.systemPrompt}</p>
+                <div className="max-h-36 overflow-y-auto rounded-md border bg-muted/40 p-2 text-xs leading-relaxed text-foreground/80">
+                  <p className="whitespace-pre-wrap">{campaign.systemPrompt}</p>
+                </div>
               </InfoField>
             )}
           </CardContent>
@@ -816,10 +814,11 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
             <div className="space-y-1.5">
               <Label>System Prompt</Label>
               <Textarea
-                value={aiInstructions}
-                onChange={(e) => setAiInstructions(e.target.value)}
-                placeholder="e.g. Reference a recent LinkedIn post when possible. Avoid generic openers. End with a soft CTA."
-                rows={5}
+                value={aiSystemPrompt}
+                onChange={(e) => setAiSystemPrompt(e.target.value)}
+                placeholder="Custom system prompt for email generation..."
+                rows={8}
+                className="resize-none overflow-y-auto"
               />
             </div>
           </div>

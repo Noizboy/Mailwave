@@ -112,8 +112,6 @@ describe("CreateCampaignWizard", () => {
       intervalType: "random",
       minInterval: 3,
       maxInterval: 8,
-      generateSubject: true,
-      generateBody: true,
     });
     // Blank optionals are dropped, not sent as ""
     expect(payload.aiProvider).toBeUndefined();

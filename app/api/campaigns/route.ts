@@ -17,8 +17,6 @@ const createSchema = z.object({
   emailLength: z.string().default("medium"),
   extraInstructions: z.string().optional(),
   systemPrompt: z.string().default(""),
-  generateSubject: z.boolean().default(true),
-  generateBody: z.boolean().default(true),
   intervalType: z.enum(["fixed", "random"]).default("random"),
   minInterval: z.number().int().min(1).default(3),
   maxInterval: z.number().int().min(1).default(8),

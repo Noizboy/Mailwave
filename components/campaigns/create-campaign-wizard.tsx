@@ -40,8 +40,6 @@ interface CampaignForWizard {
   scheduledAt?: string | null;
   aiProvider?: string | null;
   aiModel?: string | null;
-  generateSubject: boolean;
-  generateBody: boolean;
 }
 
 const wizardSchema = z.object({
@@ -60,8 +58,6 @@ const wizardSchema = z.object({
   scheduledAt: z.string().optional(),
   aiProvider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom", ""]).optional(),
   aiModel: z.string().optional(),
-  generateSubject: z.boolean(),
-  generateBody: z.boolean(),
 });
 
 type WizardData = z.infer<typeof wizardSchema>;
@@ -116,8 +112,6 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
       scheduledAt: campaign.scheduledAt ?? "",
       aiProvider: (campaign.aiProvider as WizardData["aiProvider"]) ?? "",
       aiModel: campaign.aiModel ?? "",
-      generateSubject: campaign.generateSubject ?? true,
-      generateBody: campaign.generateBody ?? true,
     } : {
       name: "",
       listId: defaultListId,
@@ -134,8 +128,6 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
       scheduledAt: "",
       aiProvider: "",
       aiModel: "",
-      generateSubject: true,
-      generateBody: true,
     },
   });
 
