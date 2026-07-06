@@ -558,6 +558,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <CardTitle>AI Instructions</CardTitle>
             <Button variant="outline" size="sm" onClick={openEditAi}>
+              <Pencil className="h-3.5 w-3.5" />
               Edit
             </Button>
           </CardHeader>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Users, Mail, Trash2, Plus } from "lucide-react";
+import { Users, Mail, Trash2, Plus, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -260,13 +260,10 @@ export function ListDetailClient({ listId }: { listId: string }) {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <button
-                        type="button"
-                        onClick={() => setEditContactId(contact.id)}
-                        className="text-xs font-medium text-primary hover:underline"
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => setEditContactId(contact.id)}>
+                        <Edit2 className="h-4 w-4" />
                         Edit
-                      </button>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
