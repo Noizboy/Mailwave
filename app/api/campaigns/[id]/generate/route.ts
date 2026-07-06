@@ -5,7 +5,7 @@ import { getGenerateQueue } from "@/lib/jobs/queue";
 
 export const runtime = "nodejs";
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -16,7 +16,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   });
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (!["draft", "pending", "failed", "pending_review"].includes(campaign.status)) {
+  if (["generating", "sending", "paused"].includes(campaign.status)) {
     return NextResponse.json(
       { error: `Cannot generate from status: ${campaign.status}` },
       { status: 409 }
@@ -37,6 +37,29 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     );
   }
 
+  const body = await req.json().catch(() => ({}));
+  const retryFailed = body?.mode === "retry_failed";
+
+  if (retryFailed) {
+    // Only reset failed emails — successfully generated ones are kept
+    await prisma.campaignEmail.updateMany({
+      where: { campaignId: campaign.id, status: "failed" },
+      data: { status: "pending", errorReason: null },
+    });
+  } else {
+    // Reset all emails for a full (re-)generation
+    await prisma.campaignEmail.updateMany({
+      where: { campaignId: campaign.id },
+      data: { status: "pending", errorReason: null },
+    });
+  }
+
+  // Set generating before queuing so the UI sees it immediately on the next poll
+  await prisma.campaign.update({
+    where: { id: campaign.id },
+    data: { status: "generating" },
+  });
+
   const queue = getGenerateQueue();
   const job = await queue.add(
     "generate",
@@ -44,7 +67,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     {
       attempts: 3,
       backoff: { type: "exponential", delay: 5000 },
-      jobId: `generate-${campaign.id}`,
+      jobId: `generate-${campaign.id}-${Date.now()}`,
       removeOnComplete: { age: 3600 },
       removeOnFail: { age: 86400 },
     }

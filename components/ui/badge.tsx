@@ -37,7 +37,6 @@ const badgeVariants = cva(
         invalid: "bg-red-50 text-red-700",
         unsubscribed: "bg-red-50 text-red-700",
 
-        draft: "bg-muted text-muted-foreground",
         suppressed: "bg-muted text-muted-foreground",
         skipped: "bg-muted text-muted-foreground",
         unlisted: "bg-muted text-muted-foreground",

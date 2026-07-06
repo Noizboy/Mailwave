@@ -49,7 +49,7 @@ const baseCampaign = {
   extraInstructions: null,
   aiProvider: null,
   aiModel: null,
-  status: "draft",
+  status: "pending",
 };
 
 const aiConfig = {

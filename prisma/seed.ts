@@ -248,7 +248,7 @@ async function main() {
 
   // Seed multiple campaigns in different states
 
-  // Campaign 1: Draft campaign
+  // Campaign 1: Pending campaign
   const sp1 = `You are an expert B2B cold email copywriter specializing in SaaS outreach to technical leaders and C-suite executives. Your goal is to get recipients to book a 30-minute product demo for MailWave, an AI-powered email automation platform.
 
 Write concise, professional emails (3-4 paragraphs) that feel personally crafted — never generic. Lead with a specific observation about the recipient's role or company, then connect it to a concrete pain point MailWave solves. Close with a single, low-friction CTA to book a demo.
@@ -274,7 +274,7 @@ Rules:
       language: "en",
       emailLength: "medium",
       systemPrompt: sp1,
-      status: "draft",
+      status: "pending",
       minInterval: 3,
       maxInterval: 8,
       dailyLimit: 100,

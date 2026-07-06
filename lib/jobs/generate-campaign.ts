@@ -26,6 +26,19 @@ const DEFAULT_MODELS: Record<string, string> = {
 export async function processGenerate(job: Job<GenerateCampaignJobData>) {
   const { campaignId, userId } = job.data;
 
+  try {
+    return await _processGenerate(job, campaignId, userId);
+  } catch (err) {
+    // Ensure campaign never stays stuck in "generating" if an unexpected error occurs
+    await prisma.campaign.updateMany({
+      where: { id: campaignId, status: "generating" },
+      data: { status: "failed" },
+    }).catch(() => {}); // best-effort — don't mask the original error
+    throw err;
+  }
+}
+
+async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: string, userId: string) {
   const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, userId },
   });
@@ -87,7 +100,7 @@ export async function processGenerate(job: Job<GenerateCampaignJobData>) {
   }
   const apiKey = decrypt(aiConfig.encryptedApiKey);
   const provider = aiConfig.provider as string;
-  const model = campaign.aiModel ?? DEFAULT_MODELS[provider] ?? "gpt-4o-mini";
+  const model = campaign.aiModel ?? aiConfig.model ?? DEFAULT_MODELS[provider] ?? "gpt-4o-mini";
   const baseUrl = aiConfig.baseUrl ?? PROVIDER_BASE_URLS[provider] ?? undefined;
 
   const systemPrompt = buildSystemPrompt({

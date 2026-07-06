@@ -109,8 +109,8 @@ describe("processSend", () => {
     expect(result).toMatchObject({ finalStatus: expect.any(String) });
   });
 
-  it("skips without changing status when campaign is not ready (e.g. draft)", async () => {
-    mocked(prisma.campaign.findFirst).mockResolvedValue({ ...baseCampaign, status: "draft" } as never);
+  it("skips without changing status when campaign is not ready (e.g. pending)", async () => {
+    mocked(prisma.campaign.findFirst).mockResolvedValue({ ...baseCampaign, status: "pending" } as never);
 
     const result = await processSend(fakeJob());
 

@@ -27,7 +27,7 @@ const campaign = {
   userId: "user-1",
   name: "Q3",
   listId: "list-1",
-  status: "draft",
+  status: "pending",
   aiProvider: null,
 };
 

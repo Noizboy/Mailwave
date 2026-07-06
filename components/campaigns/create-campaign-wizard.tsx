@@ -512,7 +512,7 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
                 <p className="text-xs text-muted-foreground">
                   {campaign
                     ? "Your campaign configuration will be updated."
-                    : "Campaign will be saved as a draft. AI generation starts automatically after creation."}
+                    : "Campaign will be created and ready for AI email generation."}
                 </p>
               </>
             )}

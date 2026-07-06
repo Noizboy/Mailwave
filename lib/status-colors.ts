@@ -11,7 +11,7 @@ export function getStatusVariant(status: string): NonNullable<BadgeProps["varian
     "sending",
     "pending", "pending_review", "generating", "paused", "missing_data", "duplicate",
     "failed", "rejected", "invalid", "unsubscribed",
-    "draft", "suppressed", "skipped", "unlisted", "disconnected",
+    "suppressed", "skipped", "unlisted", "disconnected",
   ];
   return known.includes(key) ? key : "neutral";
 }
@@ -39,7 +39,6 @@ export function getStatusColors(status: string): { bg: string; fg: string } {
     rejected:       { bg: "hsl(0 86% 96%)",   fg: "hsl(0 74% 50%)" },
     invalid:        { bg: "hsl(0 86% 96%)",   fg: "hsl(0 74% 45%)" },
     unsubscribed:   { bg: "hsl(0 86% 96%)",   fg: "hsl(0 74% 45%)" },
-    draft:          { bg: "hsl(210 40% 96%)", fg: "hsl(215 25% 35%)" },
     suppressed:     { bg: "hsl(210 40% 96%)", fg: "hsl(215 16% 47%)" },
     skipped:        { bg: "hsl(210 40% 96%)", fg: "hsl(215 16% 47%)" },
     unlisted:       { bg: "hsl(210 40% 96%)", fg: "hsl(215 16% 47%)" },

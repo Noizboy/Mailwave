@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Mail, Trash2 } from "lucide-react";
+import { Mail, Trash2, MoreHorizontal, Pencil, BarChart2, FilePen, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,6 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterBar } from "@/components/shared/filter-bar";
@@ -40,6 +47,7 @@ interface CampaignRow {
   sentCount: number;
   failedCount: number;
   pendingCount: number;
+  approvalPendingCount: number;
   skippedCount: number;
   list: { id: string; name: string };
   createdAt: string;
@@ -63,6 +71,9 @@ export function CampaignsClient() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameName, setRenameName] = useState("");
 
   const { data: campaigns = [], isLoading } = useQuery({
     queryKey: ["campaigns"],
@@ -94,6 +105,31 @@ export function CampaignsClient() {
     setSelectedIds(new Set());
     setShowBulkDeleteConfirm(false);
     queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+  };
+
+  const handleSingleDelete = async (id: string) => {
+    await fetch(`/api/campaigns/${id}`, { method: "DELETE" });
+    toast.success("Campaign deleted", "The campaign has been permanently removed.");
+    setDeletingId(null);
+    queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+  };
+
+  const handleRename = async () => {
+    if (!renameId || !renameName.trim()) return;
+    const res = await fetch(`/api/campaigns/${renameId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: renameName.trim() }),
+    });
+    if (res.ok) {
+      toast.success("Campaign renamed", "The campaign name has been updated.");
+      setRenameId(null);
+      setRenameName("");
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+    } else {
+      const err = await res.json();
+      toast.error("Rename failed", err.error ?? "Could not rename the campaign.");
+    }
   };
 
   const resetPage = (fn: () => void) => { fn(); setPage(1); };
@@ -136,7 +172,6 @@ export function CampaignsClient() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
               <SelectItem value="generating">Generating</SelectItem>
               <SelectItem value="pending_review">Pending Review</SelectItem>
               <SelectItem value="ready_to_send">Ready to Send</SelectItem>
@@ -211,13 +246,14 @@ export function CampaignsClient() {
                   <TableHead className="text-right">Failed</TableHead>
                   <TableHead className="text-right">Pending</TableHead>
                   <TableHead>Created</TableHead>
-                  <TableHead className="w-16" />
+                  <TableHead>Last Sent</TableHead>
+                  <TableHead className="w-16 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginated.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="py-12 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={11} className="py-12 text-center text-sm text-muted-foreground">
                       No campaigns match your filters.
                     </TableCell>
                   </TableRow>
@@ -232,7 +268,7 @@ export function CampaignsClient() {
                       </TableCell>
                       <TableCell>
                         <Link
-                          href={c.status === "draft" ? `/campaigns/${c.id}?wizard=1` : `/campaigns/${c.id}`}
+                          href={`/campaigns/${c.id}`}
                           className="font-medium text-foreground transition-colors hover:text-primary"
                         >
                           {c.name}
@@ -257,18 +293,53 @@ export function CampaignsClient() {
                         {c.failedCount > 0 ? c.failedCount : "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {c.pendingCount > 0 ? c.pendingCount : "—"}
+                        {c.approvalPendingCount > 0 ? c.approvalPendingCount : "—"}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(c.createdAt)}
                       </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {c.completedAt ? formatDate(c.completedAt) : "—"}
+                      </TableCell>
                       <TableCell className="text-right">
-                        <Link
-                          href={c.status === "draft" ? `/campaigns/${c.id}?wizard=1` : `/campaigns/${c.id}`}
-                          className="text-xs font-medium text-primary hover:underline"
-                        >
-                          {c.status === "draft" ? "Continue" : "View"}
-                        </Link>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={`/campaigns/${c.id}`}>
+                                <Pencil className="mr-2 h-3.5 w-3.5" />
+                                Edit
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/campaigns/${c.id}`}>
+                                <BarChart2 className="mr-2 h-3.5 w-3.5" />
+                                Reports
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setRenameId(c.id);
+                                setRenameName(c.name);
+                              }}
+                            >
+                              <FilePen className="mr-2 h-3.5 w-3.5" />
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeletingId(c.id)}
+                            >
+                              <Trash2 className="mr-2 h-3.5 w-3.5" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))
@@ -288,6 +359,7 @@ export function CampaignsClient() {
         )}
       </div>
 
+      {/* Bulk delete confirm */}
       <ConfirmDialog
         open={showBulkDeleteConfirm}
         onOpenChange={setShowBulkDeleteConfirm}
@@ -295,6 +367,35 @@ export function CampaignsClient() {
         description="This will permanently remove the selected campaigns along with their generated emails and send history. This action cannot be undone."
         confirmLabel="Delete"
         onConfirm={handleBulkDelete}
+      />
+
+      {/* Single delete confirm */}
+      <ConfirmDialog
+        open={!!deletingId}
+        onOpenChange={(open) => { if (!open) setDeletingId(null); }}
+        title="Delete campaign?"
+        description="This will permanently remove this campaign along with its generated emails and send history. This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={() => deletingId && handleSingleDelete(deletingId)}
+      />
+
+      {/* Rename dialog */}
+      <ConfirmDialog
+        open={!!renameId}
+        onOpenChange={(open) => { if (!open) { setRenameId(null); setRenameName(""); } }}
+        title="Rename campaign"
+        description={
+          <Input
+            value={renameName}
+            onChange={(e) => setRenameName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleRename(); }}
+            placeholder="Campaign name"
+            className="mt-2"
+            autoFocus
+          />
+        }
+        confirmLabel="Rename"
+        onConfirm={handleRename}
       />
     </div>
   );

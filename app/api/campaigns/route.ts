@@ -26,7 +26,7 @@ const createSchema = z.object({
   ),
   aiProvider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom"]).optional(),
   aiModel: z.string().optional(),
-  status: z.enum(["draft", "pending"]).default("draft"),
+  status: z.enum(["pending"]).default("pending"),
 });
 
 export async function GET() {
@@ -37,12 +37,22 @@ export async function GET() {
     where: { userId: session.user.id },
     include: {
       list: { select: { id: true, name: true } },
-      _count: { select: { emails: true } },
+      _count: {
+        select: {
+          emails: { where: { approvalStatus: "pending" } },
+        },
+      },
     },
     orderBy: { updatedAt: "desc" },
   });
 
-  return NextResponse.json(campaigns);
+  const rows = campaigns.map((c) => ({
+    ...c,
+    approvalPendingCount: c._count.emails,
+    _count: undefined,
+  }));
+
+  return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {
