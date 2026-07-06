@@ -1,0 +1,70 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+
+export const runtime = "nodejs";
+
+const VALID_EVENT_TYPES = [
+  "campaign_complete",
+  "campaign_error",
+  "ai_email_ready",
+  "ai_email_error",
+  "email_bounced",
+  "daily_digest",
+  "system_alerts",
+  "low_credits",
+] as const;
+
+const DEFAULTS: Record<string, boolean> = {
+  campaign_complete: true,
+  campaign_error: true,
+  ai_email_ready: false,
+  ai_email_error: true,
+  email_bounced: true,
+  daily_digest: false,
+  system_alerts: true,
+  low_credits: true,
+};
+
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const rows = await prisma.notificationPreference.findMany({
+    where: { userId: session.user.id },
+  });
+
+  const result: Record<string, boolean> = { ...DEFAULTS };
+  for (const row of rows) {
+    result[row.eventType] = row.inApp;
+  }
+
+  return NextResponse.json(result);
+}
+
+const patchSchema = z.object({
+  eventType: z.enum(VALID_EVENT_TYPES),
+  inApp: z.boolean(),
+});
+
+export async function PATCH(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json();
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const { eventType, inApp } = parsed.data;
+
+  await prisma.notificationPreference.upsert({
+    where: { userId_eventType: { userId: session.user.id, eventType } },
+    create: { userId: session.user.id, eventType, inApp, email: false },
+    update: { inApp },
+  });
+
+  return NextResponse.json({ ok: true });
+}

@@ -1,0 +1,324 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                      String                   @id @default(cuid())
+  email                   String                   @unique
+  passwordHash            String
+  name                    String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  aiConfig                AiConfig?
+  campaigns               Campaign[]
+  contacts                Contact[]
+  imports                 Import[]
+  lists                   List[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+  sendingAccount          SendingAccount?
+  smtpConfig              SmtpConfig?
+}
+
+model SmtpConfig {
+  id                String               @id @default(cuid())
+  userId            String               @unique
+  host              String?
+  port              Int?
+  username          String?
+  encryptedPassword String?
+  fromName          String?
+  fromEmail         String?
+  replyTo           String?
+  encryption        String               @default("tls")
+  dailyLimit        Int                  @default(500)
+  hourlyLimit       Int                  @default(50)
+  status            SmtpConnectionStatus @default(disconnected)
+  testedAt          DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AiConfig {
+  id              String             @id @default(cuid())
+  userId          String             @unique
+  provider        AiProvider         @default(openai)
+  model           String?
+  encryptedApiKey String?
+  baseUrl         String?
+  status          AiConnectionStatus @default(disconnected)
+  testedAt        DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SendingAccount {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  suppressAfterEmails Int      @default(3)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Contact {
+  id              String          @id @default(cuid())
+  userId          String
+  email           String
+  firstName       String?
+  lastName        String?
+  company         String?
+  jobTitle        String?
+  aiHint          String?
+  customFields    Json?
+  status          ContactStatus   @default(subscribed)
+  emailsSentCount Int             @default(0)
+  importId        String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  campaignEmails  CampaignEmail[]
+  import          Import?         @relation(fields: [importId], references: [id])
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listMembers     ListMember[]
+
+  @@unique([userId, email])
+  @@index([userId, status])
+}
+
+model Import {
+  id             String       @id @default(cuid())
+  userId         String
+  filename       String
+  rowCount       Int          @default(0)
+  validCount     Int          @default(0)
+  invalidCount   Int          @default(0)
+  duplicateCount Int          @default(0)
+  status         ImportStatus @default(pending)
+  columnMapping  Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  contacts       Contact[]
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rows           ImportRow[]
+}
+
+model ImportRow {
+  id          String          @id @default(cuid())
+  importId    String
+  rowData     Json
+  status      ImportRowStatus @default(valid)
+  errorReason String?
+  rowIndex    Int
+  import      Import          @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([importId, status])
+}
+
+model List {
+  id        String       @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  campaigns Campaign[]
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  members   ListMember[]
+}
+
+model ListMember {
+  id        String   @id @default(cuid())
+  listId    String
+  contactId String
+  addedAt   DateTime @default(now())
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  list      List     @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, contactId])
+}
+
+model Campaign {
+  id                String          @id @default(cuid())
+  userId            String
+  name              String
+  listId            String
+  goal              String?
+  product           String?
+  cta               String?
+  tone              String?
+  language          String          @default("en")
+  emailLength       String          @default("medium")
+  extraInstructions String?
+  systemPrompt      String?
+  generateSubject   Boolean         @default(true)
+  generateBody      Boolean         @default(true)
+  intervalType      IntervalType    @default(random)
+  minInterval       Int             @default(3)
+  maxInterval       Int             @default(8)
+  dailyLimit        Int             @default(100)
+  hourlyLimit       Int             @default(20)
+  scheduledAt       DateTime?
+  aiProvider        AiProvider?
+  aiModel           String?
+  status            CampaignStatus  @default(draft)
+  totalEmails       Int             @default(0)
+  sentCount         Int             @default(0)
+  failedCount       Int             @default(0)
+  pendingCount      Int             @default(0)
+  skippedCount      Int             @default(0)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  list              List            @relation(fields: [listId], references: [id])
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails            CampaignEmail[]
+}
+
+model CampaignEmail {
+  id                   String              @id @default(cuid())
+  campaignId           String
+  contactId            String
+  subject              String?
+  body                 String?
+  personalizationNotes String?
+  promptUsed           String?
+  modelUsed            String?
+  generatedAt          DateTime?
+  approvalStatus       ApprovalStatus      @default(pending)
+  revisionOf           String?
+  status               CampaignEmailStatus @default(pending)
+  sentAt               DateTime?
+  errorReason          String?
+  retryCount           Int                 @default(0)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  campaign             Campaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact              Contact             @relation(fields: [contactId], references: [id])
+  deliveryEvents       DeliveryEvent[]
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId, status])
+  @@index([campaignId, approvalStatus])
+}
+
+model DeliveryEvent {
+  id              String        @id @default(cuid())
+  campaignEmailId String
+  eventType       String
+  occurredAt      DateTime      @default(now())
+  metadata        Json?
+  campaignEmail   CampaignEmail @relation(fields: [campaignEmailId], references: [id], onDelete: Cascade)
+
+  @@index([campaignEmailId])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String
+  type       String
+  title      String
+  body       String
+  entityType String?
+  entityId   String?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
+
+model NotificationPreference {
+  id        String  @id @default(cuid())
+  userId    String
+  eventType String
+  inApp     Boolean @default(true)
+  email     Boolean @default(false)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventType])
+}
+
+enum ContactStatus {
+  subscribed
+  unsubscribed
+  suppressed
+  invalid
+}
+
+enum ImportStatus {
+  pending
+  processing
+  review
+  saved
+  cancelled
+}
+
+enum ImportRowStatus {
+  valid
+  invalid
+  duplicate
+  missing_data
+}
+
+enum CampaignStatus {
+  draft
+  pending
+  generating
+  pending_review
+  ready_to_send
+  sending
+  paused
+  completed
+  failed
+}
+
+enum CampaignEmailStatus {
+  pending
+  generated
+  approved
+  rejected
+  skipped
+  sending
+  sent
+  failed
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+  skipped
+}
+
+enum SmtpConnectionStatus {
+  connected
+  disconnected
+  failed
+}
+
+enum AiConnectionStatus {
+  connected
+  disconnected
+  invalid_key
+  error
+}
+
+enum IntervalType {
+  fixed
+  random
+}
+
+enum AiProvider {
+  openai
+  anthropic
+  google_gemini
+  openrouter
+  custom
+}
