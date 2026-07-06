@@ -3,6 +3,19 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export type AiProviderName = "openai" | "anthropic" | "google_gemini" | "openrouter" | "custom";
 
+export const PROVIDER_BASE_URLS: Record<string, string> = {
+  google_gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
+  openrouter: "https://openrouter.ai/api/v1",
+};
+
+export const DEFAULT_MODELS: Record<string, string> = {
+  openai: "gpt-4o-mini",
+  anthropic: "claude-haiku-4-5-20251001",
+  google_gemini: "gemini-1.5-flash",
+  openrouter: "openai/gpt-4o-mini",
+  custom: "gpt-4o-mini",
+};
+
 export interface AiGenerationInput {
   provider: AiProviderName;
   model: string;
@@ -10,6 +23,7 @@ export interface AiGenerationInput {
   baseUrl?: string;
   systemPrompt: string;
   userPrompt: string;
+  timeoutMs?: number;
 }
 
 export interface AiGenerationResult {
@@ -30,16 +44,20 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code fence
   "personalizationNotes": "Brief note on how this email was personalized for this contact"
 }`;
 
+  const signal = AbortSignal.timeout(input.timeoutMs ?? 30_000);
   let content: string;
 
   if (input.provider === "anthropic") {
     const client = new Anthropic({ apiKey: input.apiKey });
-    const message = await client.messages.create({
-      model: input.model,
-      max_tokens: 2048,
-      system: input.systemPrompt,
-      messages: [{ role: "user", content: fullPrompt }],
-    });
+    const message = await client.messages.create(
+      {
+        model: input.model,
+        max_tokens: 2048,
+        system: input.systemPrompt,
+        messages: [{ role: "user", content: fullPrompt }],
+      },
+      { signal }
+    );
     const block = message.content[0];
     content = block.type === "text" ? block.text : "";
   } else {
@@ -53,14 +71,17 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code fence
       baseURL: input.baseUrl,
       defaultHeaders: extraHeaders,
     });
-    const completion = await client.chat.completions.create({
-      model: input.model,
-      messages: [
-        { role: "system", content: input.systemPrompt },
-        { role: "user", content: fullPrompt },
-      ],
-      max_tokens: 2048,
-    });
+    const completion = await client.chat.completions.create(
+      {
+        model: input.model,
+        messages: [
+          { role: "system", content: input.systemPrompt },
+          { role: "user", content: fullPrompt },
+        ],
+        max_tokens: 2048,
+      },
+      { signal }
+    );
     content = completion.choices[0]?.message?.content ?? "";
   }
 

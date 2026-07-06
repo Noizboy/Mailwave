@@ -3,7 +3,7 @@ import type { Job } from "bullmq";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    campaign: { findFirst: vi.fn(), update: vi.fn() },
+    campaign: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     listMember: { findMany: vi.fn() },
     aiConfig: { findFirst: vi.fn() },
     campaignEmail: { findUnique: vi.fn(), upsert: vi.fn() },
@@ -20,6 +20,8 @@ vi.mock("@/lib/ai", () => ({
   generateEmail: vi.fn(),
   buildSystemPrompt: vi.fn(() => "system prompt"),
   buildUserPrompt: vi.fn(() => "user prompt"),
+  DEFAULT_MODELS: { openai: "gpt-4o-mini" },
+  PROVIDER_BASE_URLS: {},
 }));
 
 import { prisma } from "@/lib/prisma";
@@ -89,6 +91,7 @@ describe("processGenerate", () => {
     mocked(prisma.aiConfig.findFirst).mockResolvedValue(aiConfig as never);
     mocked(prisma.campaignEmail.findUnique).mockResolvedValue(null as never);
     mocked(prisma.campaignEmail.upsert).mockResolvedValue({} as never);
+    mocked(prisma.campaign.updateMany).mockResolvedValue({ count: 0 } as never);
     mocked(prisma.notification.create).mockResolvedValue({} as never);
     // Default: empty rows → use defaults (ai_email_ready: false, ai_email_error: true)
     mocked(prisma.notificationPreference.findMany).mockResolvedValue([] as never);
@@ -175,6 +178,55 @@ describe("processGenerate", () => {
 
     const result = await processGenerate(fakeJob());
 
+    expect(result).toEqual({ successCount: 0, failCount: 0 });
+    expect(prisma.campaign.update).toHaveBeenLastCalledWith({
+      where: { id: "camp-1" },
+      data: { status: "failed" },
+    });
+    expect(prisma.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ type: "campaign.generation_failed" }),
+      })
+    );
+  });
+
+  it("aborts generation and notifies when the AI service is unreachable", async () => {
+    mocked(prisma.listMember.findMany).mockResolvedValue([
+      member("c1", "a@b.com"),
+      member("c2", "c@d.com"),
+    ] as never);
+
+    const networkError = new Error("fetch failed");
+    mocked(generateEmail).mockRejectedValue(networkError);
+
+    const result = await processGenerate(fakeJob());
+
+    // Abort after first contact — second is never attempted
+    expect(generateEmail).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ successCount: 0, failCount: 0 });
+    expect(prisma.campaign.update).toHaveBeenLastCalledWith({
+      where: { id: "camp-1" },
+      data: { status: "failed" },
+    });
+    expect(prisma.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ type: "campaign.generation_failed" }),
+      })
+    );
+  });
+
+  it("aborts generation and notifies when the AI service returns a 5xx error", async () => {
+    mocked(prisma.listMember.findMany).mockResolvedValue([
+      member("c1", "a@b.com"),
+      member("c2", "c@d.com"),
+    ] as never);
+
+    const serverError = Object.assign(new Error("Internal Server Error"), { status: 503 });
+    mocked(generateEmail).mockRejectedValue(serverError);
+
+    const result = await processGenerate(fakeJob());
+
+    expect(generateEmail).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ successCount: 0, failCount: 0 });
     expect(prisma.campaign.update).toHaveBeenLastCalledWith({
       where: { id: "camp-1" },

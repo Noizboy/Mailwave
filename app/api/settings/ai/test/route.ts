@@ -2,23 +2,10 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { generateEmail, buildSystemPrompt, buildUserPrompt } from "@/lib/ai";
+import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS, DEFAULT_MODELS } from "@/lib/ai";
 import { APIConnectionError, AuthenticationError, NotFoundError, RateLimitError, PermissionDeniedError } from "openai";
 
 export const runtime = "nodejs";
-
-const BASE_URLS: Record<string, string> = {
-  google_gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
-  openrouter: "https://openrouter.ai/api/v1",
-};
-
-const DEFAULT_MODELS: Record<string, string> = {
-  openai: "gpt-4o-mini",
-  anthropic: "claude-haiku-4-5-20251001",
-  google_gemini: "gemini-1.5-flash",
-  openrouter: "openai/gpt-4o-mini",
-  custom: "gpt-4o-mini",
-};
 
 export async function POST() {
   const session = await auth();
@@ -36,7 +23,7 @@ export async function POST() {
     const apiKey = decrypt(config.encryptedApiKey);
     const provider = config.provider as string;
     const model = config.model ?? DEFAULT_MODELS[provider] ?? "gpt-4o-mini";
-    const baseUrl = config.baseUrl ?? BASE_URLS[provider] ?? undefined;
+    const baseUrl = config.baseUrl ?? PROVIDER_BASE_URLS[provider] ?? undefined;
 
     await generateEmail({
       provider: provider as "openai" | "anthropic" | "google_gemini" | "openrouter" | "custom",

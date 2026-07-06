@@ -2,22 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { generateEmail, buildSystemPrompt, buildUserPrompt } from "@/lib/ai";
+import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS, DEFAULT_MODELS } from "@/lib/ai";
 
 export const runtime = "nodejs";
-
-const PROVIDER_BASE_URLS: Record<string, string> = {
-  google_gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
-  openrouter: "https://openrouter.ai/api/v1",
-};
-
-const DEFAULT_MODELS: Record<string, string> = {
-  openai: "gpt-4o-mini",
-  anthropic: "claude-haiku-4-5-20251001",
-  google_gemini: "gemini-1.5-flash",
-  openrouter: "openai/gpt-4o-mini",
-  custom: "gpt-4o-mini",
-};
 
 export async function POST(
   _req: NextRequest,
@@ -73,6 +60,7 @@ export async function POST(
     tone: campaign.tone,
     language: campaign.language,
     emailLength: campaign.emailLength,
+    basePrompt: campaign.systemPrompt,
   });
 
   const { contact } = campaignEmail;

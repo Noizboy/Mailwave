@@ -583,7 +583,15 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
             ))}
           </div>
 
-          {/* Generation progress */}
+          {/* Generate button / Generation progress */}
+          {canGenerate && !isGenerating && (
+            <div className="flex justify-end">
+              <Button onClick={() => handleGenerate()}>
+                <Play className="h-4 w-4" />
+                {campaign.status === "completed" ? "Re-Generate Emails" : "Generate Emails"}
+              </Button>
+            </div>
+          )}
           {isGenerating && (
             <div className="rounded-xl border bg-card px-5 py-4 space-y-3">
               <div className="flex items-center justify-between">
@@ -728,12 +736,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                   <span className="text-sm text-muted-foreground">
                     {approvedCount}/{emails.length} approved
                   </span>
-                )}
-                {canGenerate && !isGenerating && (
-                  <Button size="sm" onClick={() => handleGenerate()}>
-                    <Play className="h-4 w-4" />
-                    {campaign.status === "completed" ? "Re-Generate Emails" : "Generate Emails"}
-                  </Button>
                 )}
               </div>
             </CardHeader>

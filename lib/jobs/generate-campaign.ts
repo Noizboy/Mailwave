@@ -1,7 +1,7 @@
 import { Worker, Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { generateEmail, buildSystemPrompt, buildUserPrompt } from "@/lib/ai";
+import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS, DEFAULT_MODELS } from "@/lib/ai";
 import { QUEUE_NAMES } from "./queue";
 import { getNotifPrefs } from "./notification-prefs";
 
@@ -10,18 +10,6 @@ export interface GenerateCampaignJobData {
   userId: string;
 }
 
-const PROVIDER_BASE_URLS: Record<string, string> = {
-  google_gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
-  openrouter: "https://openrouter.ai/api/v1",
-};
-
-const DEFAULT_MODELS: Record<string, string> = {
-  openai: "gpt-4o-mini",
-  anthropic: "claude-haiku-4-5-20251001",
-  google_gemini: "gemini-1.5-flash",
-  openrouter: "openai/gpt-4o-mini",
-  custom: "gpt-4o-mini",
-};
 
 export async function processGenerate(job: Job<GenerateCampaignJobData>) {
   const { campaignId, userId } = job.data;
@@ -173,6 +161,27 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
 
       successCount++;
     } catch (err) {
+      // If the AI service itself is unreachable/timed out, abort early — no point retrying all contacts
+      if (isServiceError(err)) {
+        await prisma.campaign.update({
+          where: { id: campaignId },
+          data: { status: "failed" },
+        });
+        if (prefs.ai_email_error) {
+          await prisma.notification.create({
+            data: {
+              userId,
+              type: "campaign.generation_failed",
+              title: "AI service unreachable",
+              body: `Generation stopped for "${campaign.name}": the AI service is unavailable or timed out. Check your AI configuration and try again.`,
+              entityType: "campaign",
+              entityId: campaignId,
+            },
+          });
+        }
+        return { successCount, failCount };
+      }
+
       await prisma.campaignEmail.upsert({
         where: { campaignId_contactId: { campaignId, contactId: contact.id } },
         create: {
@@ -239,6 +248,38 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
   }
 
   return { successCount, failCount };
+}
+
+function isServiceError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  const name = err.name.toLowerCase();
+
+  // OpenAI / Anthropic SDKs expose a .status property on API errors
+  const status = (err as { status?: number }).status;
+  if (typeof status === "number" && status >= 500) return true;
+
+  return (
+    name === "aborterror" || // AbortSignal.timeout fired
+    name === "timeouterror" ||
+    name === "apiconnectionerror" ||
+    name === "apiconnectiontimeouterror" ||
+    name === "internalservererror" ||
+    msg.includes("timeout") ||
+    msg.includes("econnrefused") ||
+    msg.includes("econnreset") ||
+    msg.includes("etimedout") ||
+    msg.includes("fetch failed") ||
+    msg.includes("socket hang up") ||
+    msg.includes("network") ||
+    msg.includes("service unavailable") ||
+    msg.includes("bad gateway") ||
+    msg.includes("gateway timeout") ||
+    msg.includes("401") ||
+    msg.includes("unauthorized") ||
+    msg.includes("invalid api key") ||
+    msg.includes("authentication")
+  );
 }
 
 export function startGenerateWorker() {
