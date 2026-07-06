@@ -53,7 +53,6 @@ const patchSchema = z.object({
   aiModel: z.string().nullable().optional(),
   scheduledAt: z.string().datetime().nullable().optional(),
   senderName: z.string().optional(),
-  senderPhone: z.string().optional(),
   senderGender: z.enum(["male", "female", ""]).optional(),
 });
 

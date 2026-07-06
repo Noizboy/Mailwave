@@ -38,8 +38,10 @@ interface DashboardData {
     totalEmails: number;
     sentCount: number;
     failedCount: number;
+    pendingCount: number;
+    completedAt: string | null;
     createdAt: string;
-    list: { name: string };
+    list: { id: string; name: string };
   }[];
 }
 
@@ -124,31 +126,47 @@ export function DashboardClient() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Campaign Name</TableHead>
+                  <TableHead>Campaign</TableHead>
+                  <TableHead>List</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Sent</TableHead>
                   <TableHead className="text-right">Failed</TableHead>
                   <TableHead className="text-right">Pending</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead>Last Sent</TableHead>
                   <TableHead className="w-16" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recentCampaigns.map((c) => (
                   <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link href={`/campaigns/${c.id}`} className="hover:text-primary">
+                        {c.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <Link href={`/lists/${c.list.id}`} className="hover:text-primary">
+                        {c.list.name}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <StatusBadge status={c.status} />
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{c.sentCount}</TableCell>
+                    <TableCell className="text-right tabular-nums">{c.totalEmails}</TableCell>
+                    <TableCell className="text-right tabular-nums font-medium text-emerald-700">{c.sentCount}</TableCell>
                     <TableCell className="text-right tabular-nums text-destructive">
-                      {c.failedCount || "—"}
+                      {c.failedCount > 0 ? c.failedCount : "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {c.totalEmails - c.sentCount - c.failedCount}
+                      {c.pendingCount > 0 ? c.pendingCount : "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatDate(c.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {c.completedAt ? formatDate(c.completedAt) : "—"}
                     </TableCell>
                     <TableCell className="text-right">
                       <Link

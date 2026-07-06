@@ -90,25 +90,18 @@ export function buildSystemPrompt(campaignContext: {
   extraInstructions?: string | null;
   basePrompt?: string | null;
   senderName?: string | null;
-  senderPhone?: string | null;
   senderGender?: string | null;
 }): string {
   const genderNote =
     campaignContext.senderGender === "male"
-      ? "The sender is male — write in a masculine voice."
+      ? "The sender is male — use masculine voice and masculine gendered endings (e.g. -o in Spanish: 'estoy listo', 'soy el encargado')."
       : campaignContext.senderGender === "female"
-      ? "The sender is female — write in a feminine voice."
+      ? "The sender is female — use feminine voice and feminine gendered endings (e.g. -a in Spanish: 'estoy lista', 'soy la encargada')."
       : null;
 
-  const footerParts = [
-    campaignContext.senderName,
-    campaignContext.senderPhone,
-  ].filter(Boolean);
-
-  const footerNote =
-    footerParts.length > 0
-      ? `Email footer/signature: ${footerParts.join(" | ")} — include this at the end of every email.`
-      : null;
+  const footerNote = campaignContext.senderName
+    ? `Email signature: ${campaignContext.senderName} — always close the email with this name as the signature.`
+    : null;
 
   const parts = [
     campaignContext.basePrompt ?? "You are an expert cold email copywriter. Write personalized, compelling emails that feel human and are tailored specifically to the recipient.",

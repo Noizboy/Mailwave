@@ -112,7 +112,6 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
     emailLength: campaign.emailLength,
     basePrompt: campaign.systemPrompt,
     senderName: campaign.senderName,
-    senderPhone: campaign.senderPhone,
     senderGender: campaign.senderGender,
   });
 

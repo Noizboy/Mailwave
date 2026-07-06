@@ -178,7 +178,7 @@ export function UploadCsvClient() {
             <CardTitle className="text-sm">Recommended columns</CardTitle>
           </CardHeader>
           <CardContent className="text-xs leading-relaxed text-muted-foreground">
-            first_name · last_name · company · job_title · linkedin
+            first_name · last_name · company · job_title · ai_hint · linkedin · phone · city · country
           </CardContent>
         </Card>
       </div>

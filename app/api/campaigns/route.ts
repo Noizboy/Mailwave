@@ -27,7 +27,6 @@ const createSchema = z.object({
   aiProvider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom"]).optional(),
   aiModel: z.string().optional(),
   senderName: z.string().optional(),
-  senderPhone: z.string().optional(),
   senderGender: z.enum(["male", "female", ""]).optional(),
   status: z.enum(["pending"]).default("pending"),
 });

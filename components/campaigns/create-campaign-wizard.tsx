@@ -35,7 +35,6 @@ interface CampaignForWizard {
   emailLength?: string | null;
   systemPrompt?: string | null;
   senderName?: string | null;
-  senderPhone?: string | null;
   senderGender?: string | null;
   intervalType: string;
   minInterval: number;
@@ -56,7 +55,6 @@ const wizardSchema = z.object({
   emailLength: z.string(),
   systemPrompt: z.string().min(1, "System prompt is required"),
   senderName: z.string().optional(),
-  senderPhone: z.string().optional(),
   senderGender: z.enum(["male", "female", ""]).optional(),
   intervalType: z.enum(["fixed", "random"]),
   minInterval: z.number().int().min(1),
@@ -113,7 +111,6 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
       emailLength: campaign.emailLength ?? "medium",
       systemPrompt: campaign.systemPrompt ?? "",
       senderName: campaign.senderName ?? "",
-      senderPhone: campaign.senderPhone ?? "",
       senderGender: (campaign.senderGender as WizardData["senderGender"]) ?? "",
       intervalType: (campaign.intervalType as "fixed" | "random") ?? "random",
       minInterval: campaign.minInterval ?? 3,
@@ -132,7 +129,6 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
       emailLength: "medium",
       systemPrompt: "",
       senderName: "",
-      senderPhone: "",
       senderGender: "" as WizardData["senderGender"],
       intervalType: "random",
       minInterval: 3,
@@ -168,7 +164,7 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
 
   const stepFields: Record<number, Array<keyof WizardData>> = {
     1: ["name", "listId"],
-    2: ["goal", "product", "cta", "tone", "language", "emailLength", "systemPrompt", "senderName", "senderPhone", "senderGender"],
+    2: ["goal", "product", "cta", "tone", "language", "emailLength", "systemPrompt", "senderName", "senderGender"],
     3: ["intervalType", "minInterval", "maxInterval", "scheduledAt"],
   };
 
@@ -384,23 +380,15 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
                     rows={5}
                   />
                 </Field>
-                <div className="grid grid-cols-2 gap-4">
-                  <Field
-                    label="Your Name"
-                    description="Sender name the AI will include in the email footer."
-                  >
-                    <Input {...register("senderName")} placeholder="e.g. John Smith" />
-                  </Field>
-                  <Field
-                    label="Your Phone"
-                    description="Contact phone number for the email footer."
-                  >
-                    <Input {...register("senderPhone")} placeholder="e.g. +1 555 000 0000" />
-                  </Field>
-                </div>
                 <Field
-                  label="Sender Gender"
-                  description="Helps the AI adapt its writing style to the sender's gender."
+                  label="Firma"
+                  description="Nombre con el que la IA firmará cada email."
+                >
+                  <Input {...register("senderName")} placeholder="e.g. John Smith" />
+                </Field>
+                <Field
+                  label="Género del remitente"
+                  description="Define cómo la IA se refiere al remitente en el email — afecta las terminaciones de vocal (a/o) en el idioma configurado."
                 >
                   <Select value={senderGender ?? ""} onValueChange={(v) => setValue("senderGender", v as WizardData["senderGender"])}>
                     <SelectTrigger><SelectValue placeholder="Select gender..." /></SelectTrigger>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { Bell, LogOut, Settings, Menu } from "lucide-react";
+import { Bell, LogOut, Settings, Menu, CheckCircle2, XCircle, Sparkles, Info } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -59,6 +59,7 @@ const PAGE_NAMES: Record<string, string> = {
   create: "Create Campaign",
   review: "Review",
   add: "Add Contact",
+  notifications: "Notifications",
 };
 
 function getBreadcrumbs(pathname: string): string {
@@ -135,6 +136,11 @@ export function TopBar({ title, actions }: TopBarProps) {
     queryClient.invalidateQueries({ queryKey: ["notifications"] });
   };
 
+  const markOneRead = async (id: string) => {
+    await fetch(`/api/notifications/${id}`, { method: "PATCH" });
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  };
+
   const smtpConnected = smtpStatus === "connected";
   const aiConnected = aiStatus === "connected";
 
@@ -199,11 +205,12 @@ export function TopBar({ title, actions }: TopBarProps) {
                     <li
                       key={n.id}
                       className={cn(
-                        "flex gap-3 px-4 py-3",
+                        "flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/60",
                         !n.read && "bg-muted/40"
                       )}
+                      onClick={() => !n.read && markOneRead(n.id)}
                     >
-                      <NotifIcon tone={getNotifTone(n.type)} />
+                      <NotifIcon tone={getNotifTone(n.type)} notifType={n.type} />
                       <div className="min-w-0 flex-1">
                         <div
                           className={cn(
@@ -229,9 +236,9 @@ export function TopBar({ title, actions }: TopBarProps) {
               )}
             </ScrollArea>
             <div className="border-t bg-muted/40 px-4 py-2 text-center">
-              <span className="text-xs font-medium text-primary">
+              <Link href="/notifications" className="text-xs font-medium text-primary hover:underline">
                 View all notifications
-              </span>
+              </Link>
             </div>
           </PopoverContent>
         </Popover>
@@ -313,7 +320,14 @@ function StatusPill({
   );
 }
 
-function NotifIcon({ tone }: { tone: "success" | "destructive" | "info" | "neutral" }) {
+function NotifIcon({ tone, notifType }: { tone: "success" | "destructive" | "info" | "neutral"; notifType: string }) {
+  const Icon =
+    tone === "success" ? CheckCircle2 :
+    tone === "destructive" ? XCircle :
+    tone === "info" ? Sparkles :
+    notifType.includes("import") || notifType.includes("upload") ? Info :
+    Bell;
+
   return (
     <div
       className={cn(
@@ -324,7 +338,7 @@ function NotifIcon({ tone }: { tone: "success" | "destructive" | "info" | "neutr
         tone === "neutral" && "bg-muted text-muted-foreground"
       )}
     >
-      <Bell className="h-3.5 w-3.5" />
+      <Icon className="h-3.5 w-3.5" />
     </div>
   );
 }
