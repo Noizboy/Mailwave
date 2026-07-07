@@ -3,9 +3,17 @@ import type { Job } from "bullmq";
 
 const sendMail = vi.fn();
 
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return {
+    ...actual,
+    randomUUID: vi.fn(() => "run-1"),
+  };
+});
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    campaign: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    campaign: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     smtpConfig: { findUnique: vi.fn() },
     sendingAccount: { findUnique: vi.fn() },
     campaignEmail: { findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
@@ -29,9 +37,9 @@ import { processSend, type SendCampaignJobData } from "./send-campaign";
 
 const mocked = vi.mocked;
 
-function fakeJob(): Job<SendCampaignJobData> {
+function fakeJob(sendRunId = "run-1"): Job<SendCampaignJobData> {
   return {
-    data: { campaignId: "camp-1", userId: "user-1" },
+    data: { campaignId: "camp-1", userId: "user-1", sendRunId },
     updateProgress: vi.fn(),
   } as unknown as Job<SendCampaignJobData>;
 }
@@ -41,6 +49,7 @@ const baseCampaign = {
   userId: "user-1",
   name: "Q3 Outreach",
   status: "ready_to_send",
+  activeSendRunId: null,
   startedAt: null,
   intervalType: "fixed",
   minInterval: 0, // keeps the inter-send setTimeout at 0ms in tests
@@ -82,7 +91,8 @@ describe("processSend", () => {
     vi.clearAllMocks();
     sendMail.mockResolvedValue({});
     mocked(prisma.campaign.findFirst).mockResolvedValue(baseCampaign as never);
-    mocked(prisma.campaign.findUnique).mockResolvedValue({ ...baseCampaign, status: "sending" } as never);
+    mocked(prisma.campaign.findUnique).mockResolvedValue({ ...baseCampaign, status: "sending", activeSendRunId: "run-1" } as never);
+    mocked(prisma.campaign.updateMany).mockResolvedValue({ count: 1 } as never);
     mocked(prisma.campaign.update).mockResolvedValue({} as never);
     mocked(prisma.smtpConfig.findUnique).mockResolvedValue(smtpConfig as never);
     mocked(prisma.sendingAccount.findUnique).mockResolvedValue(null as never);
@@ -99,11 +109,22 @@ describe("processSend", () => {
   });
 
   it("proceeds normally when campaign status is paused (resume flow)", async () => {
-    mocked(prisma.campaign.findFirst).mockResolvedValue({ ...baseCampaign, status: "paused" } as never);
+    mocked(prisma.campaign.findFirst).mockResolvedValue({ ...baseCampaign, status: "paused", activeSendRunId: "run-1" } as never);
 
-    const result = await processSend(fakeJob());
+    const result = await processSend({ ...fakeJob(), data: { campaignId: "camp-1", userId: "user-1", sendRunId: "run-1" } } as Job<SendCampaignJobData>);
 
-    expect(prisma.campaign.update).toHaveBeenCalledWith(
+    expect(prisma.campaign.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "sending" }) })
+    );
+    expect(result).toMatchObject({ finalStatus: expect.any(String) });
+  });
+
+  it("proceeds normally when campaign status is already sending", async () => {
+    mocked(prisma.campaign.findFirst).mockResolvedValue({ ...baseCampaign, status: "sending", activeSendRunId: "run-1" } as never);
+
+    const result = await processSend({ ...fakeJob(), data: { campaignId: "camp-1", userId: "user-1", sendRunId: "run-1" } } as Job<SendCampaignJobData>);
+
+    expect(prisma.campaign.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "sending" }) })
     );
     expect(result).toMatchObject({ finalStatus: expect.any(String) });
@@ -116,15 +137,17 @@ describe("processSend", () => {
 
     expect(result).toMatchObject({ skipped: true });
     expect(prisma.campaign.update).not.toHaveBeenCalled();
+    expect(prisma.campaign.updateMany).not.toHaveBeenCalled();
   });
 
   it("fails the campaign when SMTP is not connected", async () => {
+    mocked(prisma.campaign.findFirst).mockResolvedValue({ ...baseCampaign, activeSendRunId: "run-1" } as never);
     mocked(prisma.smtpConfig.findUnique).mockResolvedValue({ ...smtpConfig, status: "failed" } as never);
 
-    await expect(processSend(fakeJob())).rejects.toThrow("SMTP not configured or not connected");
-    expect(prisma.campaign.update).toHaveBeenLastCalledWith({
-      where: { id: "camp-1" },
-      data: { status: "failed" },
+    await expect(processSend({ ...fakeJob(), data: { campaignId: "camp-1", userId: "user-1", sendRunId: "run-1" } } as Job<SendCampaignJobData>)).rejects.toThrow("SMTP not configured or not connected");
+    expect(prisma.campaign.updateMany).toHaveBeenCalledWith({
+      where: { id: "camp-1", activeSendRunId: "run-1" },
+      data: { status: "failed", activeSendRunId: null, nextSendAt: null },
     });
   });
 
@@ -165,10 +188,12 @@ describe("processSend", () => {
       expect.objectContaining({ data: { sentCount: { increment: 1 } } })
     );
     // final update carries status/failedCount but NOT sentCount (already persisted above)
-    expect(prisma.campaign.update).toHaveBeenLastCalledWith(
+    expect(prisma.campaign.updateMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        where: { id: "camp-1", activeSendRunId: "run-1" },
         data: expect.objectContaining({
           status: "completed",
+          activeSendRunId: null,
           completedAt: expect.any(Date),
         }),
       })
@@ -290,14 +315,27 @@ describe("processSend", () => {
       approvedEmail("e2", "c2"),
     ] as never);
     mocked(prisma.campaign.findUnique)
-      .mockResolvedValueOnce({ ...baseCampaign, status: "sending" } as never)
+      .mockResolvedValueOnce({ ...baseCampaign, status: "sending", activeSendRunId: "run-1" } as never)
       .mockResolvedValueOnce({ ...baseCampaign, status: "paused" } as never);
     mocked(prisma.campaignEmail.count).mockResolvedValue(1 as never);
 
-    const result = await processSend(fakeJob());
+    const result = await processSend({ ...fakeJob(), data: { campaignId: "camp-1", userId: "user-1", sendRunId: "run-1" } } as Job<SendCampaignJobData>);
 
     expect(sendMail).toHaveBeenCalledTimes(1);
     expect(result.finalStatus).toBe("paused");
+  });
+
+  it("exits without finalizing when a newer send run takes over", async () => {
+    mocked(prisma.campaign.findFirst).mockResolvedValue({ ...baseCampaign, status: "paused", activeSendRunId: "run-1" } as never);
+    mocked(prisma.campaignEmail.findMany).mockResolvedValue([approvedEmail("e1", "c1")] as never);
+    mocked(prisma.campaign.findUnique)
+      .mockResolvedValueOnce({ ...baseCampaign, status: "paused", activeSendRunId: "run-2" } as never)
+      .mockResolvedValueOnce({ activeSendRunId: "run-2" } as never);
+    mocked(prisma.campaignEmail.count).mockResolvedValue(1 as never);
+
+    const result = await processSend({ ...fakeJob(), data: { campaignId: "camp-1", userId: "user-1", sendRunId: "run-1" } } as Job<SendCampaignJobData>);
+
+    expect(result.finalStatus).toBe("stale");
   });
 
   // NOTIF-003: campaign_complete preference

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -31,7 +32,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(campaign);
+  const metrics = deriveCampaignMetrics(campaign.emails);
+  return NextResponse.json({
+    ...campaign,
+    sentCount: metrics.sentCount,
+    failedCount: metrics.failedCount,
+    skippedCount: metrics.skippedCount,
+    pendingCount: metrics.pendingCount,
+  });
 }
 
 const patchSchema = z.object({

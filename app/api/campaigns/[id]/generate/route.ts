@@ -55,14 +55,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Reset send counters so the progress bar starts fresh
     await prisma.campaign.update({
       where: { id: campaign.id },
-      data: { sentCount: 0, failedCount: 0, skippedCount: 0 },
+      data: {
+        sentCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        pendingCount: 0,
+        activeSendRunId: null,
+        startedAt: null,
+        nextSendAt: null,
+        completedAt: null,
+      },
     });
   }
 
   // Set generating before queuing so the UI sees it immediately on the next poll
   await prisma.campaign.update({
     where: { id: campaign.id },
-    data: { status: "generating" },
+    data: { status: "generating", activeSendRunId: null, nextSendAt: null },
   });
 
   const queue = getGenerateQueue();

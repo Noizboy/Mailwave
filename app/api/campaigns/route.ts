@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
 import { prisma } from "@/lib/prisma";
 import { getSendQueue } from "@/lib/jobs/queue";
 import { z } from "zod";
@@ -36,19 +37,19 @@ export async function GET() {
     where: { userId: session.user.id },
     include: {
       list: { select: { id: true, name: true } },
-      _count: {
+      emails: {
         select: {
-          emails: { where: { approvalStatus: "pending" } },
+          approvalStatus: true,
+          status: true,
         },
       },
     },
     orderBy: { updatedAt: "desc" },
   });
 
-  const rows = campaigns.map((c) => ({
-    ...c,
-    approvalPendingCount: c._count.emails,
-    _count: undefined,
+  const rows = campaigns.map(({ emails, ...campaign }) => ({
+    ...campaign,
+    ...deriveCampaignMetrics(emails),
   }));
 
   return NextResponse.json(rows);

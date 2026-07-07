@@ -25,8 +25,10 @@ describe("api/dashboard + reports + notifications", () => {
       mocked(prisma.contact.count).mockResolvedValue(10 as never);
       mocked(prisma.list.count).mockResolvedValue(2 as never);
       mocked(prisma.campaign.count).mockResolvedValue(1 as never);
-      mocked(prisma.campaign.aggregate).mockResolvedValue({ _sum: { sentCount: null, failedCount: null } } as never);
-      mocked(prisma.campaignEmail.count).mockResolvedValue(4 as never);
+      mocked(prisma.campaignEmail.count)
+        .mockResolvedValueOnce(0 as never)
+        .mockResolvedValueOnce(0 as never)
+        .mockResolvedValueOnce(4 as never);
       mocked(prisma.smtpConfig.findUnique).mockResolvedValue(null as never);
       mocked(prisma.aiConfig.findUnique).mockResolvedValue(null as never);
       mocked(prisma.campaign.findMany).mockResolvedValue([] as never);
@@ -51,10 +53,11 @@ describe("api/dashboard + reports + notifications", () => {
     it("computes the delivery rate from sent and failed sums", async () => {
       mocked(prisma.contact.count).mockResolvedValue(0 as never);
       mocked(prisma.campaign.count).mockResolvedValue(0 as never);
-      mocked(prisma.campaign.aggregate)
-        .mockResolvedValueOnce({ _sum: { sentCount: 90 } } as never)
-        .mockResolvedValueOnce({ _sum: { failedCount: 10 } } as never);
+      mocked(prisma.campaignEmail.count)
+        .mockResolvedValueOnce(90 as never)
+        .mockResolvedValueOnce(10 as never);
       mocked(prisma.campaign.findMany).mockResolvedValue([] as never);
+      mocked(prisma.deliveryEvent.groupBy).mockResolvedValue([] as never);
 
       const res = await getReports();
       const body = await res.json();
@@ -66,8 +69,11 @@ describe("api/dashboard + reports + notifications", () => {
     it("returns 0 delivery rate when nothing was sent (no division by zero)", async () => {
       mocked(prisma.contact.count).mockResolvedValue(0 as never);
       mocked(prisma.campaign.count).mockResolvedValue(0 as never);
-      mocked(prisma.campaign.aggregate).mockResolvedValue({ _sum: { sentCount: null, failedCount: null } } as never);
+      mocked(prisma.campaignEmail.count)
+        .mockResolvedValueOnce(0 as never)
+        .mockResolvedValueOnce(0 as never);
       mocked(prisma.campaign.findMany).mockResolvedValue([] as never);
+      mocked(prisma.deliveryEvent.groupBy).mockResolvedValue([] as never);
 
       const res = await getReports();
       expect((await res.json()).summary.deliveryRate).toBe(0);
@@ -116,7 +122,7 @@ describe("api/dashboard + reports + notifications", () => {
       mocked(prisma.notification.findMany).mockResolvedValue([{ id: "n1" }] as never);
       mocked(prisma.notification.count).mockResolvedValue(1 as never);
 
-      const res = await getNotifications();
+      const res = await getNotifications(jsonRequest("/api/notifications"));
       const body = await res.json();
 
       expect(body.unreadCount).toBe(1);

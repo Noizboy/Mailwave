@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -107,6 +107,8 @@ interface CampaignDetail {
   minInterval: number;
   maxInterval: number;
   startedAt: string | null;
+  nextSendAt: string | null;
+  updatedAt: string;
   createdAt: string;
   scheduledAt: string | null;
   emails: CampaignEmail[];
@@ -182,28 +184,43 @@ const LANGUAGE_LABELS: Record<string, string> = {
 };
 
 const EMAIL_LENGTH_LABELS: Record<string, string> = {
+  "very-short": "Very Short (under 50 words)",
   short: "Short (60–100 words)",
   medium: "Medium (100–200 words)",
   long: "Long (200–350 words)",
 };
 
-function getNextEmailLabel(campaign: CampaignDetail): string | null {
+function formatCountdown(msRemaining: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(msRemaining / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+  if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+  return `${seconds}s`;
+}
+
+function getNextEmailLabel(campaign: CampaignDetail, nowMs: number): string | null {
   if (campaign.status !== "sending") return null;
   // No more emails to process — don't show a countdown
   const processed = campaign.sentCount + campaign.failedCount + campaign.skippedCount;
   if (processed >= campaign.totalEmails) return null;
+  if (campaign.nextSendAt) {
+    const remainingMs = new Date(campaign.nextSendAt).getTime() - nowMs;
+    return remainingMs > 0 ? formatCountdown(remainingMs) : "Sending now...";
+  }
+
   const sentEmails = campaign.emails.filter((e) => e.status === "sent" && e.sentAt);
-  if (!sentEmails.length) return null;
-  const lastSentMs = Math.max(...sentEmails.map((e) => new Date(e.sentAt!).getTime()));
-  const avgInterval =
-    campaign.intervalType === "random"
-      ? Math.round((campaign.minInterval + campaign.maxInterval) / 2)
-      : campaign.minInterval;
-  const nextMs = lastSentMs + avgInterval * 60 * 1000;
-  const diffMin = Math.round((nextMs - Date.now()) / 60000);
-  if (diffMin <= 0) return "soon";
-  if (diffMin < 60) return `~${diffMin} min`;
-  return `~${Math.round(diffMin / 60)} hr`;
+  const fallbackTargetMs = sentEmails.length
+    ? Math.max(...sentEmails.map((e) => new Date(e.sentAt!).getTime())) + campaign.minInterval * 60 * 1000
+    : Math.max(
+        ...[campaign.startedAt, campaign.updatedAt]
+          .filter((value): value is string => Boolean(value))
+          .map((value) => new Date(value).getTime())
+      );
+  if (!Number.isFinite(fallbackTargetMs)) return null;
+  return fallbackTargetMs > nowMs ? formatCountdown(fallbackTargetMs - nowMs) : "Sending now...";
 }
 
 async function fetchCampaign(id: string): Promise<CampaignDetail> {
@@ -256,6 +273,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const [sendingMinInterval, setSendingMinInterval] = useState(3);
   const [sendingMaxInterval, setSendingMaxInterval] = useState(8);
   const [savingSending, setSavingSending] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const { data: campaign, isLoading: campaignLoading } = useQuery({
     queryKey: ["campaign", campaignId],
@@ -274,6 +292,12 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     refetchInterval: (campaign?.status === "generating" || campaign?.status === "sending") ? 3000 : false,
   });
 
+  useEffect(() => {
+    if (campaign?.status !== "sending") return;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [campaign?.status]);
+
   const emails = emailsData?.emails ?? [];
   const failedGenerationEmails = emails.filter((e) => e.status === "failed");
   const filteredEmails =
@@ -287,7 +311,8 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const selected = emails.find((e) => e.id === selectedId) ?? filteredEmails[0] ?? null;
 
   const approvedCount = emails.filter((e) => e.approvalStatus === "approved").length;
-  const pendingCount = emails.filter((e) => e.approvalStatus === "pending").length;
+  const reviewPendingCount = emails.filter((e) => e.approvalStatus === "pending").length;
+  const sendPendingCount = campaign?.pendingCount ?? 0;
   const rejectedCount = emails.filter((e) => e.approvalStatus === "rejected").length;
   const skippedCount = emails.filter((e) => e.approvalStatus === "skipped").length;
   const sentEmailsCount = emails.filter((e) => e.status === "sent").length;
@@ -339,6 +364,9 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     if (res.ok) {
       toast.success("Campaign paused", "No more emails will be sent until you resume.");
       invalidate();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error("Could not pause campaign", err.error ?? "The server could not pause this campaign.");
     }
   };
 
@@ -606,7 +634,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const FILTER_TABS = [
     { key: "all", label: `All (${emails.length})` },
     { key: "sent", label: `Sent (${sentEmailsCount})` },
-    { key: "pending", label: `Pending (${pendingCount})` },
+    { key: "pending", label: `Pending (${reviewPendingCount})` },
     { key: "approved", label: `Approved (${approvedCount})` },
     { key: "rejected", label: `Rejected (${rejectedCount})` },
     { key: "skipped", label: `Skipped (${skippedCount})` },
@@ -624,7 +652,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
       ? Math.round((generatedCount / campaign.totalEmails) * 100)
       : 0;
 
-  const nextEmailLabel = getNextEmailLabel(campaign);
+  const nextEmailLabel = getNextEmailLabel(campaign, nowMs);
 
   const stats: Array<{
     label: string;
@@ -655,8 +683,8 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
       iconBg: "bg-red-100",
     },
     {
-      label: "Pending",
-      value: pendingCount,
+      label: "Queued",
+      value: sendPendingCount,
       tone: "warning",
       icon: <Clock className="h-5 w-5 text-amber-500" />,
       iconBg: "bg-amber-100",
@@ -1454,6 +1482,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                       <SelectValue placeholder="Select length" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="very-short">Very Short (under 50 words)</SelectItem>
                       <SelectItem value="short">Short (60–100 words)</SelectItem>
                       <SelectItem value="medium">Medium (100–200 words)</SelectItem>
                       <SelectItem value="long">Long (200–350 words)</SelectItem>

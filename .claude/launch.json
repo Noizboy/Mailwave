@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "Mailwave Worker",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "jobs/worker.ts"],
+      "port": 3001,
+      "autoPort": true
     }
   ]
 }

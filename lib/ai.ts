@@ -136,6 +136,7 @@ export function buildSystemPrompt(campaignContext: {
 }
 
 function emailLengthGuide(length: string): string {
+  if (length === "very-short") return "1-3 sentences, extremely brief, under 50 words";
   if (length === "short") return "1-2 paragraphs, very concise";
   if (length === "long") return "5+ paragraphs, detailed";
   return "3-4 paragraphs, balanced";

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { startGenerateWorker } from "../lib/jobs/generate-campaign";
 import { startSendWorker } from "../lib/jobs/send-campaign";
 import { startApplySuppressThresholdWorker } from "../lib/jobs/apply-suppress-threshold";

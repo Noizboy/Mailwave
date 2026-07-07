@@ -12,7 +12,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const updated = await prisma.campaign.updateMany({
     where: { id, userId: session.user.id, status: "sending" },
-    data: { status: "paused" },
+    data: { status: "paused", activeSendRunId: null },
   });
 
   if (updated.count === 0) {

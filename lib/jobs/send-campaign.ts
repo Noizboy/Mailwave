@@ -1,31 +1,50 @@
 import { Worker, Job } from "bullmq";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import nodemailer from "nodemailer";
 import { QUEUE_NAMES } from "./queue";
 import { getNotifPrefs } from "./notification-prefs";
+import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
 
 export interface SendCampaignJobData {
   campaignId: string;
   userId: string;
+  sendRunId?: string;
 }
 
 export async function processSend(job: Job<SendCampaignJobData>) {
   const { campaignId, userId } = job.data;
+  const sendRunId = job.data.sendRunId ?? randomUUID();
 
   const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, userId },
   });
   if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
-  if (!["ready_to_send", "paused"].includes(campaign.status)) {
+  if (!["ready_to_send", "paused", "sending"].includes(campaign.status)) {
     return { skipped: true, reason: `Campaign status is '${campaign.status}', not ready` };
   }
 
-  // Mark as sending
-  await prisma.campaign.update({
-    where: { id: campaignId },
-    data: { status: "sending", startedAt: campaign.startedAt ?? new Date() },
+  const claim = await prisma.campaign.updateMany({
+    where: {
+      id: campaignId,
+      userId,
+      status: { in: ["ready_to_send", "paused", "sending"] },
+      OR: [
+        { activeSendRunId: sendRunId },
+        { activeSendRunId: null },
+      ],
+    },
+    data: {
+      status: "sending",
+      activeSendRunId: sendRunId,
+      startedAt: campaign.startedAt ?? new Date(),
+      nextSendAt: campaign.nextSendAt ?? new Date(),
+    },
   });
+  if (claim.count === 0) {
+    return { skipped: true, reason: "A newer send run already owns this campaign" };
+  }
 
   // Fetch notification prefs once — used across the entire job
   const prefs = await getNotifPrefs(userId, ["campaign_complete", "campaign_error", "email_bounced"]);
@@ -33,7 +52,10 @@ export async function processSend(job: Job<SendCampaignJobData>) {
   // Get SMTP config
   const smtpConfig = await prisma.smtpConfig.findUnique({ where: { userId } });
   if (!smtpConfig || !smtpConfig.encryptedPassword || smtpConfig.status !== "connected") {
-    await prisma.campaign.update({ where: { id: campaignId }, data: { status: "failed" } });
+    await prisma.campaign.updateMany({
+      where: { id: campaignId, activeSendRunId: sendRunId },
+      data: { status: "failed", activeSendRunId: null, nextSendAt: null },
+    });
 
     if (prefs.campaign_error) {
       await prisma.notification.create({
@@ -83,10 +105,18 @@ export async function processSend(job: Job<SendCampaignJobData>) {
   let sentCount = 0;
   let failCount = 0;
 
-  for (const email of pendingEmails) {
+  for (let index = 0; index < pendingEmails.length; index++) {
+    const email = pendingEmails[index];
     // Re-check campaign status in case it was paused
-    const freshCampaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
-    if (!freshCampaign || freshCampaign.status === "paused") break;
+    let freshCampaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
+    if (!freshCampaign || freshCampaign.status === "paused" || freshCampaign.activeSendRunId !== sendRunId) break;
+
+    const nextSendTargetMs = freshCampaign.nextSendAt ? new Date(freshCampaign.nextSendAt).getTime() : Date.now();
+    if (nextSendTargetMs > Date.now()) {
+      await new Promise((resolve) => setTimeout(resolve, nextSendTargetMs - Date.now()));
+      freshCampaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
+      if (!freshCampaign || freshCampaign.status === "paused" || freshCampaign.activeSendRunId !== sendRunId) break;
+    }
 
     // Check daily/hourly limits
     const now = new Date();
@@ -218,6 +248,14 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       ? Math.floor(Math.random() * (campaign.maxInterval - campaign.minInterval + 1) + campaign.minInterval)
       : campaign.minInterval;
 
+    const hasMorePendingEmails = index < pendingEmails.length - 1;
+    await prisma.campaign.update({
+      where: { id: campaignId },
+      data: {
+        nextSendAt: hasMorePendingEmails ? new Date(Date.now() + interval * 60 * 1000) : null,
+      },
+    });
+
     await new Promise((resolve) => setTimeout(resolve, interval * 60 * 1000));
 
     await job.updateProgress(Math.round(((sentCount + failCount) / pendingEmails.length) * 100));
@@ -231,13 +269,33 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       status: { in: ["generated", "approved"] },
     },
   });
+  const emailMetrics = deriveCampaignMetrics(
+    await prisma.campaignEmail.findMany({
+      where: { campaignId },
+      select: { approvalStatus: true, status: true },
+    })
+  );
+
+  const latestCampaign = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { activeSendRunId: true },
+  });
+  if (latestCampaign?.activeSendRunId !== sendRunId) {
+    return { sentCount, failCount, finalStatus: "stale" };
+  }
 
   const finalStatus = remaining === 0 ? "completed" : "paused";
 
-  await prisma.campaign.update({
-    where: { id: campaignId },
+  await prisma.campaign.updateMany({
+    where: { id: campaignId, activeSendRunId: sendRunId },
     data: {
       status: finalStatus,
+      activeSendRunId: null,
+      sentCount: emailMetrics.sentCount,
+      failedCount: emailMetrics.failedCount,
+      skippedCount: emailMetrics.skippedCount,
+      pendingCount: emailMetrics.pendingCount,
+      nextSendAt: null,
       ...(finalStatus === "completed" ? { completedAt: new Date() } : {}),
     },
   });

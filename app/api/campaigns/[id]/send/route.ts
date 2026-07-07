@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSendQueue } from "@/lib/jobs/queue";
@@ -45,29 +46,45 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     );
   }
 
+  const sendRunId = randomUUID();
   const queue = getSendQueue();
-  const jobId = `send-${campaign.id}`;
+  await prisma.campaign.update({
+    where: { id: campaign.id },
+    data: {
+      status: "sending",
+      activeSendRunId: sendRunId,
+      startedAt: campaign.status === "paused" ? campaign.startedAt ?? new Date() : new Date(),
+      nextSendAt: campaign.status === "paused" ? campaign.nextSendAt : new Date(),
+      completedAt: null,
+    },
+  });
 
-  // Remove any completed/failed job with the same ID so BullMQ doesn't deduplicate
-  // a fresh send against a prior run that is still within the retention window.
-  const existingJob = await queue.getJob(jobId);
-  if (existingJob) {
-    const state = await existingJob.getState();
-    if (state === "completed" || state === "failed") {
-      await existingJob.remove();
-    }
+  try {
+    const job = await queue.add(
+      "send",
+      { campaignId: campaign.id, userId: session.user.id, sendRunId },
+      {
+        attempts: 1,
+        jobId: `send-${campaign.id}-${sendRunId}`,
+        removeOnComplete: { age: 3600 },
+        removeOnFail: { age: 86400 },
+      }
+    );
+
+    return NextResponse.json({ jobId: job.id, status: "queued" });
+  } catch (error) {
+    await prisma.campaign.update({
+      where: { id: campaign.id },
+      data: {
+        status: campaign.status,
+        activeSendRunId: campaign.activeSendRunId ?? null,
+        startedAt: campaign.startedAt,
+        nextSendAt: campaign.nextSendAt,
+        completedAt: campaign.completedAt,
+      },
+    });
+
+    console.error("Failed to enqueue send job", error);
+    return NextResponse.json({ error: "Could not queue send job" }, { status: 500 });
   }
-
-  const job = await queue.add(
-    "send",
-    { campaignId: campaign.id, userId: session.user.id },
-    {
-      attempts: 1,
-      jobId,
-      removeOnComplete: { age: 3600 },
-      removeOnFail: { age: 86400 },
-    }
-  );
-
-  return NextResponse.json({ jobId: job.id, status: "queued" });
 }

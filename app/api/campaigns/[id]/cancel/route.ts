@@ -27,7 +27,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // Pause first so any running send job stops on its next iteration
   await prisma.campaign.update({
     where: { id },
-    data: { status: "paused" },
+    data: { status: "paused", nextSendAt: null, activeSendRunId: null },
   });
 
   // Reset failed emails back to approved so they can be retried on next send
@@ -39,7 +39,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // Move campaign back to ready_to_send so the user can trigger a fresh send
   await prisma.campaign.update({
     where: { id },
-    data: { status: "ready_to_send" },
+    data: { status: "ready_to_send", activeSendRunId: null, nextSendAt: null, completedAt: null },
   });
 
   return NextResponse.json({ ok: true });

@@ -46,7 +46,9 @@ describe("api/campaigns", () => {
     });
 
     it("lists campaigns scoped to the session user", async () => {
-      mocked(prisma.campaign.findMany).mockResolvedValue([campaign] as never);
+      mocked(prisma.campaign.findMany).mockResolvedValue([
+        { ...campaign, emails: [] },
+      ] as never);
       const res = await getCampaigns();
       expect(res.status).toBe(200);
       expect(prisma.campaign.findMany).toHaveBeenCalledWith(
@@ -188,7 +190,7 @@ describe("api/campaigns", () => {
       expect(queueAdd).toHaveBeenCalledWith(
         "generate",
         { campaignId: "camp-1", userId: "user-1" },
-        expect.objectContaining({ jobId: "generate-camp-1" })
+        expect.objectContaining({ jobId: expect.stringMatching(/^generate-camp-1-\d+$/) })
       );
     });
   });
@@ -238,6 +240,7 @@ describe("api/campaigns", () => {
       } as never);
       mocked(prisma.smtpConfig.findUnique).mockResolvedValue({ status: "connected" } as never);
       mocked(prisma.campaignEmail.count).mockResolvedValue(5 as never);
+      mocked(prisma.campaign.update).mockResolvedValue({ id: "camp-1", status: "sending" } as never);
 
       const res = await sendCampaign(
         jsonRequest("/api/campaigns/camp-1/send", { method: "POST" }),
@@ -247,9 +250,44 @@ describe("api/campaigns", () => {
       expect((await res.json()).status).toBe("queued");
       expect(queueAdd).toHaveBeenCalledWith(
         "send",
-        { campaignId: "camp-1", userId: "user-1" },
-        expect.objectContaining({ jobId: "send-camp-1" })
+        expect.objectContaining({ campaignId: "camp-1", userId: "user-1", sendRunId: expect.any(String) }),
+        expect.objectContaining({ jobId: expect.stringMatching(/^send-camp-1-/) })
       );
+      expect(prisma.campaign.update).toHaveBeenCalledWith({
+        where: { id: "camp-1" },
+        data: expect.objectContaining({
+          status: "sending",
+          activeSendRunId: expect.any(String),
+          startedAt: expect.any(Date),
+          completedAt: null,
+        }),
+      });
+    });
+
+    it("preserves the pending nextSendAt when resuming a paused campaign", async () => {
+      const nextSendAt = new Date(Date.now() + 2 * 60 * 1000);
+      mocked(prisma.campaign.findFirst).mockResolvedValue({
+        ...campaign,
+        status: "paused",
+        startedAt: new Date(Date.now() - 60_000),
+        nextSendAt,
+      } as never);
+      mocked(prisma.smtpConfig.findUnique).mockResolvedValue({ status: "connected" } as never);
+      mocked(prisma.campaignEmail.count).mockResolvedValue(5 as never);
+      mocked(prisma.campaign.update).mockResolvedValue({ id: "camp-1", status: "sending" } as never);
+
+      const res = await sendCampaign(
+        jsonRequest("/api/campaigns/camp-1/send", { method: "POST" }),
+        routeParams({ id: "camp-1" })
+      );
+
+      expect(res.status).toBe(200);
+      expect(prisma.campaign.update).toHaveBeenCalledWith({
+        where: { id: "camp-1" },
+        data: expect.objectContaining({
+          nextSendAt,
+        }),
+      });
     });
   });
 
@@ -272,7 +310,7 @@ describe("api/campaigns", () => {
       expect(res.status).toBe(200);
       expect(prisma.campaign.updateMany).toHaveBeenCalledWith({
         where: { id: "camp-1", userId: "user-1", status: "sending" },
-        data: { status: "paused" },
+        data: { status: "paused", activeSendRunId: null },
       });
     });
   });

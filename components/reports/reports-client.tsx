@@ -353,7 +353,7 @@ export function ReportsClient() {
                 <StatChip label="Sent" value={emailStats.sent} tone="success" />
                 <StatChip label="Failed" value={emailStats.failed} tone="destructive" />
                 <StatChip
-                  label="Pending"
+                  label="Queued"
                   value={emailStats.pending + emailStats.generated}
                   tone="info"
                 />
@@ -471,7 +471,7 @@ export function ReportsClient() {
                 <StatChip label="Sent" value={emailStats.sent} tone="success" />
                 <StatChip label="Failed" value={emailStats.failed} tone="destructive" />
                 <StatChip
-                  label="Pending"
+                  label="Queued"
                   value={emailStats.pending + emailStats.generated}
                   tone="info"
                 />

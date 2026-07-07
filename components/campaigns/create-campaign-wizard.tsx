@@ -339,6 +339,7 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
                     <Select value={emailLength} onValueChange={(v) => setValue("emailLength", v)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="very-short">Very Short (1-3 sentences)</SelectItem>
                         <SelectItem value="short">Short (1-2 paragraphs)</SelectItem>
                         <SelectItem value="medium">Medium (3-4 paragraphs)</SelectItem>
                         <SelectItem value="long">Long (5+ paragraphs)</SelectItem>
