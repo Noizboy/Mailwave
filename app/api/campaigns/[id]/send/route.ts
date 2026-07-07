@@ -17,7 +17,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   });
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (!["ready_to_send", "paused"].includes(campaign.status)) {
+  if (!["ready_to_send", "paused", "pending_review"].includes(campaign.status)) {
     return NextResponse.json(
       { error: `Cannot send from status: ${campaign.status}` },
       { status: 409 }

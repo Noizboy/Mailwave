@@ -50,13 +50,15 @@ export function SettingsClient() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          {TABS.map((t) => (
-            <TabsTrigger key={t.key} value={t.key}>
-              {t.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="w-max">
+            {TABS.map((t) => (
+              <TabsTrigger key={t.key} value={t.key}>
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
         <TabsContent value="smtp" forceMount className="hidden data-[state=active]:block"><SmtpSettings /></TabsContent>
         <TabsContent value="ai" forceMount className="hidden data-[state=active]:block"><AiSettings /></TabsContent>
         <TabsContent value="limits" forceMount className="hidden data-[state=active]:block"><SendingLimitsSettings /></TabsContent>

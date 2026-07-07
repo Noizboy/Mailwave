@@ -10,9 +10,10 @@ export default function ContactsPage() {
     <div className="flex flex-col h-full">
       <TopBar
         title="Contacts"
+        hideTitleOnMobile
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="outline" size="sm" asChild className="hidden md:inline-flex">
               <Link href="/upload">
                 <Upload className="h-4 w-4" />
                 Import CSV

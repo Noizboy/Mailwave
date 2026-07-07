@@ -248,7 +248,7 @@ export function ImportReviewClient({ importId }: { importId: string }) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-b bg-background px-6 py-4">
+      <div className="border-b bg-background px-3 py-4 sm:px-6">
         <p className="mb-3 text-sm text-muted-foreground">
           Reviewing:{" "}
           <span className="font-medium text-foreground">{data.filename}</span>
@@ -264,7 +264,7 @@ export function ImportReviewClient({ importId }: { importId: string }) {
       </div>
 
       {/* Filter + Bulk Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-background px-6 py-3">
+      <div className="flex flex-col gap-2 border-b bg-background px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6">
         <div className="flex flex-wrap gap-1.5">
           {(
             ["all", "valid", "invalid", "duplicate", "missing_data"] as const
@@ -288,7 +288,7 @@ export function ImportReviewClient({ importId }: { importId: string }) {
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {selectedIds.size > 0 && (
             <>
               <span className="text-xs text-muted-foreground">
@@ -300,13 +300,13 @@ export function ImportReviewClient({ importId }: { importId: string }) {
                 onClick={() => setShowDeleteConfirm(true)}
               >
                 <Trash2 className="h-4 w-4" />
-                Delete Selected
+                <span className="hidden sm:inline">Delete Selected</span>
               </Button>
             </>
           )}
           <Button variant="outline" size="sm" onClick={handleCancel}>
             <X className="h-4 w-4" />
-            Cancel Import
+            <span className="hidden sm:inline">Cancel Import</span>
           </Button>
           <Button size="sm" onClick={() => setShowSaveDialog(true)}>
             <Save className="h-4 w-4" />
@@ -317,7 +317,7 @@ export function ImportReviewClient({ importId }: { importId: string }) {
 
       {/* Table */}
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-sm">
+        <table className="min-w-full text-sm">
           <thead className="sticky top-0 z-10 border-b bg-muted/50">
             <tr>
               <th className="w-10 px-4 py-3">
@@ -614,7 +614,7 @@ function SummaryChip({
   return (
     <div
       className={cn(
-        "rounded-lg border p-4",
+        "rounded-lg border p-3 sm:p-4",
         tone === "neutral" && "border-border bg-muted",
         tone === "success" && "border-emerald-200 bg-emerald-50",
         tone === "warning" && "border-amber-200 bg-amber-50",
@@ -622,12 +622,12 @@ function SummaryChip({
         tone === "info" && "border-blue-200 bg-blue-50"
       )}
     >
-      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground sm:text-[11px]">
         {label}
       </div>
       <div
         className={cn(
-          "mt-1 text-2xl font-semibold tabular-nums",
+          "mt-1 text-xl font-semibold tabular-nums sm:text-2xl",
           tone === "neutral" && "text-foreground",
           tone === "success" && "text-emerald-700",
           tone === "warning" && "text-amber-700",

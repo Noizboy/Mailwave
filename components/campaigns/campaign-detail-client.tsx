@@ -624,8 +624,14 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const canGenerate = ["pending", "failed", "completed"].includes(campaign.status);
   const canRetryGeneration = campaign.status === "pending_review" && campaign.failedCount > 0;
   const canRegenerate = ["pending_review", "ready_to_send"].includes(campaign.status) && campaign.failedCount === 0;
-  const canApprove = campaign.status === "pending_review";
-  const canSend = ["ready_to_send", "paused"].includes(campaign.status);
+  const allReviewed =
+    emails.length > 0 &&
+    campaign.status === "pending_review" &&
+    reviewPendingCount === 0 &&
+    rejectedCount === 0 &&
+    approvedCount > 0;
+  const canApprove = campaign.status === "pending_review" && !allReviewed;
+  const canSend = ["ready_to_send", "paused"].includes(campaign.status) || allReviewed;
   const canPause = campaign.status === "sending";
   const isGenerating = campaign.status === "generating";
   const hasFailures = campaign.failedCount > 0 && ["sending", "paused", "completed"].includes(campaign.status);
@@ -741,7 +747,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                       </Button>
                     )}
                     {canRegenerate && (
-                      <Button size="sm" onClick={() => handleGenerate()} variant="outline">
+                      <Button size="sm" onClick={() => handleGenerate()} variant={allReviewed ? "outline" : "outline"}>
                         <RefreshCw className="h-4 w-4" />
                         Re-Generate Emails
                       </Button>

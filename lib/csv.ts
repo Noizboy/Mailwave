@@ -119,6 +119,7 @@ export const KNOWN_COLUMN_MAP: Record<string, string> = {
   notes: "aiHint",
   hint: "aiHint",
   "ai hint": "aiHint",
+  "ai_hint": "aiHint",
   note: "aiHint",
   linkedin: "linkedin",
   "linkedin url": "linkedin",

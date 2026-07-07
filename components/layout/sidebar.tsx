@@ -23,10 +23,10 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/upload", label: "Upload CSV", icon: Upload },
-  { href: "/contacts", label: "Contacts", icon: Users },
-  { href: "/lists", label: "Lists", icon: List },
   { href: "/campaigns", label: "Campaigns", icon: Mail },
+  { href: "/lists", label: "Lists", icon: List },
+  { href: "/contacts", label: "Contacts", icon: Users },
+  { href: "/upload", label: "Upload CSV", icon: Upload },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -42,9 +42,14 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         onClick={onNavigate}
         className="mb-4 flex items-center gap-2.5 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
       >
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-          <Mail className="h-4 w-4" strokeWidth={2.5} />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo.png"
+          alt="Mailwave"
+          width={28}
+          height={28}
+          className="rounded-md"
+        />
         <span className="text-[15px] font-semibold tracking-tight text-white">Mailwave</span>
       </Link>
 

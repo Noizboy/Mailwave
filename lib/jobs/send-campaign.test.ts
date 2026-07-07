@@ -17,11 +17,18 @@ vi.mock("@/lib/prisma", () => ({
     smtpConfig: { findUnique: vi.fn() },
     sendingAccount: { findUnique: vi.fn() },
     campaignEmail: { findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
-    deliveryEvent: { count: vi.fn(), create: vi.fn() },
+    deliveryEvent: { count: vi.fn(), create: vi.fn(), findFirst: vi.fn() },
     contact: { update: vi.fn() },
     notification: { create: vi.fn(), findFirst: vi.fn() },
     notificationPreference: { findMany: vi.fn() },
   },
+}));
+
+const queueAdd = vi.fn();
+vi.mock("./queue", () => ({
+  QUEUE_NAMES: { send: "campaign-send", generate: "campaign-generate", suppressContacts: "suppress-contacts", dailyDigest: "daily-digest" },
+  getSendQueue: vi.fn(() => ({ add: queueAdd })),
+  getSuppressContactsQueue: vi.fn(() => ({ add: vi.fn() })),
 }));
 
 vi.mock("@/lib/crypto", () => ({
@@ -101,6 +108,8 @@ describe("processSend", () => {
     mocked(prisma.campaignEmail.count).mockResolvedValue(0 as never);
     mocked(prisma.deliveryEvent.count).mockResolvedValue(0 as never);
     mocked(prisma.deliveryEvent.create).mockResolvedValue({} as never);
+    mocked(prisma.deliveryEvent.findFirst).mockResolvedValue(null as never);
+    queueAdd.mockResolvedValue({ id: "job-1" });
     mocked(prisma.contact.update).mockResolvedValue({} as never);
     mocked(prisma.notification.create).mockResolvedValue({} as never);
     mocked(prisma.notification.findFirst).mockResolvedValue(null as never);
@@ -215,6 +224,30 @@ describe("processSend", () => {
     expect(sendMail).not.toHaveBeenCalled();
     expect(result).toEqual({ sentCount: 0, failCount: 0, finalStatus: "paused" });
     expect(prisma.notification.create).not.toHaveBeenCalled();
+    expect(queueAdd).toHaveBeenCalledWith("send", expect.objectContaining({ campaignId: "camp-1" }), expect.objectContaining({ delay: expect.any(Number) }));
+  });
+
+  it("schedules a delayed re-queue with the correct resume time when the hourly limit is hit", async () => {
+    const oldestEventTime = Date.now() - 1800000; // 30 min ago → resumes in 30 min
+    mocked(prisma.campaignEmail.findMany).mockResolvedValue([approvedEmail("e1", "c1")] as never);
+    mocked(prisma.deliveryEvent.count).mockResolvedValue(100 as never); // == hourlyLimit
+    mocked(prisma.deliveryEvent.findFirst).mockResolvedValue({ occurredAt: new Date(oldestEventTime) } as never);
+    mocked(prisma.campaignEmail.count).mockResolvedValue(1 as never);
+
+    await processSend(fakeJob());
+
+    const addCall = queueAdd.mock.calls[0];
+    const opts = addCall[2] as { delay: number };
+    // delay should be ~30 min + 1s buffer (1801000ms), allow ±5s for test execution
+    expect(opts.delay).toBeGreaterThan(1800000);
+    expect(opts.delay).toBeLessThan(1802000);
+
+    // nextSendAt should be set on the campaign (not null)
+    expect(prisma.campaign.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ nextSendAt: expect.any(Date) }),
+      })
+    );
   });
 
   it("skips contacts that hit the per-contact send cap", async () => {

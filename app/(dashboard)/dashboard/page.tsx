@@ -10,7 +10,7 @@ export default function DashboardPage() {
       <TopBar
         title="Dashboard"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2">
             <Button variant="outline" size="sm" asChild>
               <Link href="/upload">
                 <Upload className="h-4 w-4" />

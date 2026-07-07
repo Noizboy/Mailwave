@@ -34,6 +34,7 @@ import {
 interface TopBarProps {
   title: string;
   actions?: React.ReactNode;
+  hideTitleOnMobile?: boolean;
 }
 
 interface Notification {
@@ -87,7 +88,7 @@ function getNotifTone(type: string): "success" | "destructive" | "info" | "neutr
   return "neutral";
 }
 
-export function TopBar({ title, actions }: TopBarProps) {
+export function TopBar({ title, actions, hideTitleOnMobile }: TopBarProps) {
   const { data: session } = useSession();
   const pathname = usePathname();
   const queryClient = useQueryClient();
@@ -159,7 +160,7 @@ export function TopBar({ title, actions }: TopBarProps) {
         </Button>
 
         {/* Title area */}
-        <div className="min-w-0 flex-1 overflow-hidden">
+        <div className={cn("min-w-0 flex-1 overflow-hidden", hideTitleOnMobile && "hidden md:block")}>
           <div className="truncate text-[11px] text-muted-foreground">{crumbs}</div>
           <div className="truncate text-base font-semibold tracking-tight text-foreground">
             {title}

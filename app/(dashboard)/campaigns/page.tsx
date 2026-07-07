@@ -9,6 +9,7 @@ export default function CampaignsPage() {
     <div className="flex flex-col h-full">
       <TopBar
         title="Campaigns"
+        hideTitleOnMobile
         actions={
           <Button size="sm" asChild>
             <Link href="/campaigns/create">

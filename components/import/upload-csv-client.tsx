@@ -93,7 +93,7 @@ export function UploadCsvClient() {
               <button
                 type="button"
                 className={cn(
-                  "flex w-full flex-col items-center gap-3 rounded-lg border-2 border-dashed px-6 py-12 transition-colors",
+                  "flex w-full flex-col items-center gap-3 rounded-lg border-2 border-dashed px-6 py-8 transition-colors sm:py-12",
                   state === "dragging"
                     ? "border-primary bg-primary/5"
                     : "border-input bg-muted/30 hover:border-primary hover:bg-primary/5"
@@ -140,24 +140,28 @@ export function UploadCsvClient() {
               )}
             </>
           ) : (
-            <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="truncate text-sm font-semibold text-emerald-900">
-                  {result?.filename}
+            <div className="flex flex-col gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-3 sm:contents">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white">
+                  <CheckCircle2 className="h-5 w-5" />
                 </div>
-                <div className="text-xs text-emerald-700">
-                  {result?.rowCount} rows · {result?.validCount} valid ·{" "}
-                  {(result?.invalidCount ?? 0) + (result?.duplicateCount ?? 0)} issues
+                <div className="flex-1 min-w-0">
+                  <div className="truncate text-sm font-semibold text-emerald-900">
+                    {result?.filename}
+                  </div>
+                  <div className="text-xs text-emerald-700">
+                    {result?.rowCount} rows · {result?.validCount} valid ·{" "}
+                    {(result?.invalidCount ?? 0) + (result?.duplicateCount ?? 0)} issues
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:shrink-0">
                 <Button variant="outline" onClick={handleReset}>
                   Upload another
                 </Button>
-                <Button onClick={handleContinue}>Continue to Review</Button>
+                <Button onClick={handleContinue}>
+                  Continue to Review
+                </Button>
               </div>
             </div>
           )}
@@ -178,7 +182,7 @@ export function UploadCsvClient() {
             <CardTitle className="text-sm">Recommended columns</CardTitle>
           </CardHeader>
           <CardContent className="text-xs leading-relaxed text-muted-foreground">
-            first_name · last_name · company · job_title · ai_hint · linkedin
+            first_name · last_name · company · job_title · ai_hint
           </CardContent>
         </Card>
       </div>

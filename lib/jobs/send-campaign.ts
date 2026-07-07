@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import nodemailer from "nodemailer";
-import { QUEUE_NAMES } from "./queue";
+import { QUEUE_NAMES, getSendQueue } from "./queue";
 import { getNotifPrefs } from "./notification-prefs";
 import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
 
@@ -104,6 +104,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
 
   let sentCount = 0;
   let failCount = 0;
+  let rateLimitResumeAt: Date | null = null;
 
   for (let index = 0; index < pendingEmails.length; index++) {
     const email = pendingEmails[index];
@@ -139,6 +140,51 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     });
 
     if (sentLastHour >= smtpConfig.hourlyLimit || sentLastDay >= smtpConfig.dailyLimit) {
+      // Compute when each exceeded limit clears (oldest event in window + window size)
+      const resumeTimes: number[] = [];
+
+      if (sentLastHour >= smtpConfig.hourlyLimit) {
+        const oldest = await prisma.deliveryEvent.findFirst({
+          where: {
+            campaignEmail: { campaign: { userId } },
+            eventType: "sent",
+            occurredAt: { gte: hourAgo },
+          },
+          orderBy: { occurredAt: "asc" },
+        });
+        if (oldest) resumeTimes.push(oldest.occurredAt.getTime() + 3600000 + 1000);
+      }
+
+      if (sentLastDay >= smtpConfig.dailyLimit) {
+        const oldest = await prisma.deliveryEvent.findFirst({
+          where: {
+            campaignEmail: { campaign: { userId } },
+            eventType: "sent",
+            occurredAt: { gte: dayAgo },
+          },
+          orderBy: { occurredAt: "asc" },
+        });
+        if (oldest) resumeTimes.push(oldest.occurredAt.getTime() + 86400000 + 1000);
+      }
+
+      rateLimitResumeAt = new Date(
+        resumeTimes.length > 0 ? Math.max(...resumeTimes) : Date.now() + 3600000
+      );
+
+      const newSendRunId = randomUUID();
+      const delay = Math.max(0, rateLimitResumeAt.getTime() - Date.now());
+      await getSendQueue().add(
+        "send",
+        { campaignId, userId, sendRunId: newSendRunId },
+        {
+          delay,
+          jobId: `send-${campaignId}-${newSendRunId}`,
+          attempts: 1,
+          removeOnComplete: { age: 3600 },
+          removeOnFail: { age: 86400 },
+        }
+      );
+
       break;
     }
 
@@ -156,7 +202,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     }
 
     try {
-      const appUrl = process.env.APP_URL ?? "";
+      const appUrl = process.env.NEXTAUTH_URL ?? "";
       const htmlBody = (email.body ?? "").replace(/\n/g, "<br>");
       const pixelUrl = `${appUrl}/api/track/${email.id}`;
 
@@ -295,7 +341,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       failedCount: emailMetrics.failedCount,
       skippedCount: emailMetrics.skippedCount,
       pendingCount: emailMetrics.pendingCount,
-      nextSendAt: null,
+      nextSendAt: rateLimitResumeAt ?? null,
       ...(finalStatus === "completed" ? { completedAt: new Date() } : {}),
     },
   });
