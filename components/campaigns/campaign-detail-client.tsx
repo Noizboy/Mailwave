@@ -20,6 +20,7 @@ import {
   Clock,
   ChevronDown,
   ChevronRight,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -175,6 +176,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   // Collapsible state for detail cards
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [sendingOpen, setSendingOpen] = useState(false);
 
   // Campaign Details edit state
   const [editDetailsOpen, setEditDetailsOpen] = useState(false);
@@ -191,6 +193,13 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const [aiEmailLength, setAiEmailLength] = useState("");
   const [aiSystemPrompt, setAiSystemPrompt] = useState("");
   const [savingAi, setSavingAi] = useState(false);
+
+  // Sending Configuration edit state
+  const [editSendingOpen, setEditSendingOpen] = useState(false);
+  const [sendingIntervalType, setSendingIntervalType] = useState<"fixed" | "random">("random");
+  const [sendingMinInterval, setSendingMinInterval] = useState(3);
+  const [sendingMaxInterval, setSendingMaxInterval] = useState(8);
+  const [savingSending, setSavingSending] = useState(false);
 
   const { data: campaign, isLoading: campaignLoading } = useQuery({
     queryKey: ["campaign", campaignId],
@@ -216,6 +225,8 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
       ? emails
       : sidebarFilter === "failed_gen"
       ? failedGenerationEmails
+      : sidebarFilter === "sent"
+      ? emails.filter((e) => e.status === "sent")
       : emails.filter((e) => e.approvalStatus === sidebarFilter);
   const selected = emails.find((e) => e.id === selectedId) ?? filteredEmails[0] ?? null;
 
@@ -223,6 +234,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const pendingCount = emails.filter((e) => e.approvalStatus === "pending").length;
   const rejectedCount = emails.filter((e) => e.approvalStatus === "rejected").length;
   const skippedCount = emails.filter((e) => e.approvalStatus === "skipped").length;
+  const sentEmailsCount = emails.filter((e) => e.status === "sent").length;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
@@ -398,6 +410,34 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     setSavingDetails(false);
   };
 
+  const openEditSending = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!campaign) return;
+    setSendingIntervalType(campaign.intervalType as "fixed" | "random");
+    setSendingMinInterval(campaign.minInterval);
+    setSendingMaxInterval(campaign.maxInterval);
+    setEditSendingOpen(true);
+  };
+
+  const saveSending = async () => {
+    setSavingSending(true);
+    const res = await fetch(`/api/campaigns/${campaignId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        intervalType: sendingIntervalType,
+        minInterval: sendingMinInterval,
+        maxInterval: sendingIntervalType === "random" ? sendingMaxInterval : sendingMinInterval,
+      }),
+    });
+    if (res.ok) {
+      toast.success("Sending configuration saved", "Interval settings have been updated.");
+      setEditSendingOpen(false);
+      invalidate();
+    }
+    setSavingSending(false);
+  };
+
   const openEditAi = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!campaign) return;
@@ -483,6 +523,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
 
   const FILTER_TABS = [
     { key: "all", label: `All (${emails.length})` },
+    { key: "sent", label: `Sent (${sentEmailsCount})` },
     { key: "pending", label: `Pending (${pendingCount})` },
     { key: "approved", label: `Approved (${approvedCount})` },
     { key: "rejected", label: `Rejected (${rejectedCount})` },
@@ -723,6 +764,50 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
             )}
           </div>
 
+          {/* Collapsible Sending Configuration */}
+          <div className="rounded-xl border bg-card">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setSendingOpen((v) => !v)}
+              onKeyDown={(e) => e.key === "Enter" && setSendingOpen((v) => !v)}
+              className="flex w-full cursor-pointer items-center justify-between px-5 py-4 select-none"
+            >
+              <span className="text-sm font-semibold text-foreground">Sending Configuration</span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openEditSending}
+                  className="h-7 text-xs"
+                >
+                  <Pencil className="h-3 w-3" />
+                  Edit
+                </Button>
+                {sendingOpen ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            </div>
+            {sendingOpen && (
+              <div className="border-t px-5 py-4 space-y-4">
+                <InfoField label="INTERVAL TYPE">
+                  {campaign.intervalType === "fixed" ? "Fixed" : "Random"}
+                </InfoField>
+                {campaign.intervalType === "fixed" ? (
+                  <InfoField label="INTERVAL">{campaign.minInterval} min</InfoField>
+                ) : (
+                  <>
+                    <InfoField label="MIN INTERVAL">{campaign.minInterval} min</InfoField>
+                    <InfoField label="MAX INTERVAL">{campaign.maxInterval} min</InfoField>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Generated Emails — split review view */}
           <Card className="overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between border-b pb-3">
@@ -789,8 +874,16 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                               DOT_COLOR[email.approvalStatus] ?? "bg-muted-foreground"
                             )}
                           />
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-foreground">{name}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate text-sm font-medium text-foreground">{name}</span>
+                              {email.status === "sent" && (
+                                <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                  <Send className="h-2.5 w-2.5" />
+                                  Sent
+                                </span>
+                              )}
+                            </div>
                             {(email.contact.firstName || email.contact.lastName) && (
                               <div className="truncate text-xs text-muted-foreground">
                                 {email.contact.email}
@@ -1015,6 +1108,67 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
               <div className="border-t p-6">
                 <Button onClick={saveDetails} disabled={savingDetails} className="w-full">
                   {savingDetails ? "Saving..." : "Save Details"}
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          {/* Edit Sending Configuration sheet */}
+          <Sheet open={editSendingOpen} onOpenChange={setEditSendingOpen}>
+            <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+              <SheetHeader className="border-b p-6">
+                <SheetTitle>Edit Sending Configuration</SheetTitle>
+                <SheetDescription>Control how quickly emails are delivered.</SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 space-y-5 overflow-y-auto p-6">
+                <div className="space-y-1.5">
+                  <Label>Interval Type</Label>
+                  <Select value={sendingIntervalType} onValueChange={(v) => setSendingIntervalType(v as "fixed" | "random")}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">Fixed — same delay between every email</SelectItem>
+                      <SelectItem value="random">Random — random delay within a range</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {sendingIntervalType === "fixed" ? (
+                  <div className="space-y-1.5">
+                    <Label>Interval (minutes)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={sendingMinInterval}
+                      onChange={(e) => setSendingMinInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label>Min Interval (minutes)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={sendingMinInterval}
+                        onChange={(e) => setSendingMinInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Max Interval (minutes)</Label>
+                      <Input
+                        type="number"
+                        min={sendingMinInterval}
+                        value={sendingMaxInterval}
+                        onChange={(e) => setSendingMaxInterval(Math.max(sendingMinInterval, parseInt(e.target.value) || sendingMinInterval))}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="border-t p-6">
+                <Button onClick={saveSending} disabled={savingSending} className="w-full">
+                  {savingSending ? "Saving..." : "Save Configuration"}
                 </Button>
               </div>
             </SheetContent>
