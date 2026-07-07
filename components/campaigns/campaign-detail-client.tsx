@@ -120,11 +120,9 @@ const TONE_LABELS: Record<string, string> = {
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
   es: "Spanish",
-  "es-latam": "Spanish (LATAM)",
   pt: "Portuguese",
   fr: "French",
   de: "German",
-  it: "Italian",
 };
 
 const EMAIL_LENGTH_LABELS: Record<string, string> = {
@@ -530,6 +528,12 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
               </Button>
             ) : (
               <>
+                {canGenerate && (
+                  <Button size="sm" onClick={() => handleGenerate()}>
+                    <Play className="h-4 w-4" />
+                    {campaign.status === "completed" ? "Re-Generate Emails" : "Generate Emails"}
+                  </Button>
+                )}
                 {canRetryGeneration && (
                   <Button size="sm" onClick={() => handleGenerate("retry_failed")} variant="outline">
                     <RotateCcw className="h-4 w-4" />
@@ -583,15 +587,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
             ))}
           </div>
 
-          {/* Generate button / Generation progress */}
-          {canGenerate && !isGenerating && (
-            <div className="flex justify-end">
-              <Button onClick={() => handleGenerate()}>
-                <Play className="h-4 w-4" />
-                {campaign.status === "completed" ? "Re-Generate Emails" : "Generate Emails"}
-              </Button>
-            </div>
-          )}
+          {/* Generation progress */}
           {isGenerating && (
             <div className="rounded-xl border bg-card px-5 py-4 space-y-3">
               <div className="flex items-center justify-between">
@@ -1057,11 +1053,9 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                     <SelectContent>
                       <SelectItem value="en">English</SelectItem>
                       <SelectItem value="es">Spanish</SelectItem>
-                      <SelectItem value="es-latam">Spanish (LATAM)</SelectItem>
                       <SelectItem value="pt">Portuguese</SelectItem>
                       <SelectItem value="fr">French</SelectItem>
                       <SelectItem value="de">German</SelectItem>
-                      <SelectItem value="it">Italian</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

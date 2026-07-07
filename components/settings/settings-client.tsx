@@ -484,17 +484,16 @@ interface AiData {
 function AiSettings() {
   const queryClient = useQueryClient();
   const [apiKey, setApiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
   const [form, setForm] = useState<Partial<AiData>>(() =>
     queryClient.getQueryData<AiData | null>(["settings-ai"]) ?? { provider: "openai" }
   );
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [loaded, setLoaded] = useState(() =>
-    !!queryClient.getQueryData<AiData | null>(["settings-ai"])
+  const [initialized, setInitialized] = useState(() =>
+    queryClient.getQueryData(["settings-ai"]) !== undefined
   );
 
-  const { data: config } = useQuery<AiData | null>({
+  const { data: config, isLoading } = useQuery<AiData | null>({
     queryKey: ["settings-ai"],
     queryFn: async () => {
       const res = await fetch("/api/settings/ai");
@@ -504,13 +503,23 @@ function AiSettings() {
   });
 
   useEffect(() => {
-    if (config && !loaded) {
-      setForm(config);
-      setLoaded(true);
+    if (!initialized && !isLoading) {
+      if (config) setForm(config);
+      setInitialized(true);
     }
-  }, [config]);
+  }, [config, isLoading, initialized]);
 
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
+
+  if (isLoading || !initialized) {
+    return (
+      <Card>
+        <CardContent className="py-10 flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   const handleSave = async () => {
     setSaving(true);
@@ -565,25 +574,16 @@ function AiSettings() {
           </Select>
         </SettingField>
         <SettingField label="API Key">
-          <div className="relative">
-            <Input
-              type={showKey ? "text" : "password"}
-              value={config?.id && !apiKey ? "••••••••••••••••" : apiKey}
-              onChange={(e) => {
-                const v = e.target.value;
-                setApiKey(v.startsWith("••••••••••••••••") ? v.slice(16) : v);
-              }}
-              onFocus={(e) => { if (config?.id && !apiKey) e.target.select(); }}
-              placeholder="sk-..."
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey(!showKey)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
+          <Input
+            type="password"
+            value={config?.id && !apiKey ? "••••••••••••••••" : apiKey}
+            onChange={(e) => {
+              const v = e.target.value;
+              setApiKey(v.startsWith("••••••••••••••••") ? v.slice(16) : v);
+            }}
+            onFocus={(e) => { if (config?.id && !apiKey) e.target.select(); }}
+            placeholder="sk-..."
+          />
         </SettingField>
         <SettingField label="Model">
           <Input
@@ -638,19 +638,12 @@ interface LimitsData {
 
 function SendingLimitsSettings() {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<LimitsData>(() =>
-    queryClient.getQueryData<LimitsData>(["settings-limits"]) ?? {
-      dailyLimit: 500,
-      hourlyLimit: 50,
-      suppressAfterEmails: 3,
-    }
+  const [form, setForm] = useState<LimitsData | null>(() =>
+    queryClient.getQueryData<LimitsData>(["settings-limits"]) ?? null
   );
   const [saving, setSaving] = useState(false);
-  const [loaded, setLoaded] = useState(() =>
-    !!queryClient.getQueryData<LimitsData>(["settings-limits"])
-  );
 
-  const { data: limitsData } = useQuery<LimitsData>({
+  const { data: limitsData, isLoading } = useQuery<LimitsData>({
     queryKey: ["settings-limits"],
     queryFn: async () => {
       const res = await fetch("/api/settings/sending-limits");
@@ -660,16 +653,16 @@ function SendingLimitsSettings() {
   });
 
   useEffect(() => {
-    if (limitsData && !loaded) {
+    if (limitsData && form === null) {
       setForm(limitsData);
-      setLoaded(true);
     }
   }, [limitsData]);
 
   const setNum = (key: keyof LimitsData, value: string) =>
-    setForm((f) => ({ ...f, [key]: parseInt(value) || 0 }));
+    setForm((f) => f ? { ...f, [key]: parseInt(value) || 0 } : f);
 
   const handleSave = async () => {
+    if (!form) return;
     setSaving(true);
     const res = await fetch("/api/settings/sending-limits", {
       method: "PUT",
@@ -684,6 +677,16 @@ function SendingLimitsSettings() {
     }
     setSaving(false);
   };
+
+  if (isLoading || !form) {
+    return (
+      <Card>
+        <CardContent className="py-10 flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -740,10 +743,7 @@ interface AccountData {
 function AccountSettings() {
   const queryClient = useQueryClient();
   const [name, setName] = useState(() =>
-    queryClient.getQueryData<AccountData>(["settings-account"])?.name ?? ""
-  );
-  const [loaded, setLoaded] = useState(() =>
-    !!queryClient.getQueryData<AccountData>(["settings-account"])
+    queryClient.getQueryData<AccountData>(["settings-account"])?.name ?? null
   );
   const [saving, setSaving] = useState(false);
 
@@ -752,7 +752,7 @@ function AccountSettings() {
   const [confirmPw, setConfirmPw] = useState("");
   const [changingPw, setChangingPw] = useState(false);
 
-  const { data: user } = useQuery<AccountData>({
+  const { data: user, isLoading } = useQuery<AccountData>({
     queryKey: ["settings-account"],
     queryFn: async () => {
       const res = await fetch("/api/settings/account");
@@ -762,11 +762,20 @@ function AccountSettings() {
   });
 
   useEffect(() => {
-    if (user && !loaded) {
+    if (user && name === null) {
       setName(user.name ?? "");
-      setLoaded(true);
     }
   }, [user]);
+
+  if (isLoading || name === null) {
+    return (
+      <Card>
+        <CardContent className="py-10 flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   const handleSaveProfile = async () => {
     setSaving(true);

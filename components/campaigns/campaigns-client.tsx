@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Mail, Trash2, MoreHorizontal, Pencil, BarChart2, FilePen, Plus } from "lucide-react";
+import { Mail, Trash2, MoreHorizontal, Pencil, FilePen, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -313,12 +313,6 @@ export function CampaignsClient() {
                               <Link href={`/campaigns/${c.id}`}>
                                 <Pencil className="mr-2 h-3.5 w-3.5" />
                                 Edit
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/campaigns/${c.id}`}>
-                                <BarChart2 className="mr-2 h-3.5 w-3.5" />
-                                Reports
                               </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem
