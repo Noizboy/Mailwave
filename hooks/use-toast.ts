@@ -1,6 +1,6 @@
 import { sileo } from "sileo";
 
-const POS = "bottom-right" as const;
+const POS = "top-center" as const;
 
 export const toast = (props: { title?: string; description?: string }) =>
   sileo.info({ title: props.title, description: props.description, position: POS });

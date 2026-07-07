@@ -48,6 +48,39 @@ export async function GET() {
   const failed = totalFailed._sum.failedCount ?? 0;
   const deliveryRate = sent + failed > 0 ? Math.round((sent / (sent + failed)) * 100) : 0;
 
+  // Deduplicated open counts per campaign (one open per email, not per event)
+  const openGroups = await prisma.deliveryEvent.groupBy({
+    by: ["campaignEmailId"],
+    where: {
+      eventType: "opened",
+      campaignEmail: { campaign: { userId } },
+    },
+    _count: { campaignEmailId: true },
+  });
+
+  // Map campaignEmailId → campaignId to bucket opens per campaign
+  const openedEmailIds = openGroups.map((g) => g.campaignEmailId);
+  const openedEmails =
+    openedEmailIds.length > 0
+      ? await prisma.campaignEmail.findMany({
+          where: { id: { in: openedEmailIds } },
+          select: { id: true, campaignId: true },
+        })
+      : [];
+
+  const openCountByCampaign: Record<string, number> = {};
+  for (const e of openedEmails) {
+    openCountByCampaign[e.campaignId] = (openCountByCampaign[e.campaignId] ?? 0) + 1;
+  }
+
+  const totalOpened = openedEmailIds.length;
+  const openRate = sent > 0 ? Math.round((totalOpened / sent) * 100) : 0;
+
+  const campaigns = campaignBreakdown.map((c) => ({
+    ...c,
+    openedCount: openCountByCampaign[c.id] ?? 0,
+  }));
+
   return NextResponse.json({
     summary: {
       totalContacts,
@@ -57,7 +90,9 @@ export async function GET() {
       totalEmailsSent: sent,
       totalFailed: failed,
       deliveryRate,
+      totalOpened,
+      openRate,
     },
-    campaigns: campaignBreakdown,
+    campaigns,
   });
 }

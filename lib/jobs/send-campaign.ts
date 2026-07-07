@@ -122,12 +122,19 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     }
 
     try {
+      const appUrl = process.env.APP_URL ?? "";
+      const htmlBody = (email.body ?? "").replace(/\n/g, "<br>");
+      const pixelUrl = `${appUrl}/api/track/${email.id}`;
+
       await transporter.sendMail({
         from: `"${smtpConfig.fromName ?? ""}" <${smtpConfig.fromEmail}>`,
         replyTo: smtpConfig.replyTo ?? undefined,
         to: email.contact.email,
         subject: email.subject ?? "(No subject)",
         text: email.body ?? "",
+        html:
+          `<div style="font-family:sans-serif;font-size:14px;line-height:1.6">${htmlBody}</div>` +
+          `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none" />`,
       });
 
       await prisma.campaignEmail.update({

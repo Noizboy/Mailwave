@@ -45,6 +45,8 @@ interface ReportSummary {
   totalEmailsSent: number;
   totalFailed: number;
   deliveryRate: number;
+  totalOpened: number;
+  openRate: number;
 }
 
 interface CampaignReport {
@@ -55,6 +57,7 @@ interface CampaignReport {
   sentCount: number;
   failedCount: number;
   skippedCount: number;
+  openedCount: number;
   startedAt: string | null;
   completedAt: string | null;
   list: { name: string };
@@ -182,9 +185,11 @@ export function ReportsClient() {
   const metrics = [
     { label: "Emails Sent", value: summary.totalEmailsSent },
     { label: "Failed", value: summary.totalFailed },
+    { label: "Opens", value: summary.totalOpened },
+    { label: "Open Rate", value: `${summary.openRate}%` },
+    { label: "Delivery Rate", value: `${summary.deliveryRate}%` },
     { label: "Total Campaigns", value: summary.totalCampaigns },
     { label: "Contacts", value: summary.totalContacts },
-    { label: "Delivery Rate", value: `${summary.deliveryRate}%` },
   ];
 
   // Campaigns tab pagination
@@ -210,7 +215,7 @@ export function ReportsClient() {
             </Button>
           }
         />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {metrics.map((m) => (
             <MetricCard key={m.label} label={m.label} value={m.value} />
           ))}
@@ -386,7 +391,8 @@ export function ReportsClient() {
                         <TableHead className="text-right">Total</TableHead>
                         <TableHead className="text-right">Sent</TableHead>
                         <TableHead className="text-right">Failed</TableHead>
-                        <TableHead className="text-right">Rate</TableHead>
+                        <TableHead className="text-right">Opens · Rate</TableHead>
+                        <TableHead className="text-right">Delivery</TableHead>
                         <TableHead>Completed</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -395,6 +401,10 @@ export function ReportsClient() {
                         const rate =
                           c.sentCount + c.failedCount > 0
                             ? Math.round((c.sentCount / (c.sentCount + c.failedCount)) * 100)
+                            : 0;
+                        const openRate =
+                          c.sentCount > 0
+                            ? Math.round((c.openedCount / c.sentCount) * 100)
                             : 0;
                         return (
                           <TableRow key={c.id}>
@@ -416,6 +426,9 @@ export function ReportsClient() {
                             </TableCell>
                             <TableCell className="text-right text-sm tabular-nums text-destructive">
                               {c.failedCount > 0 ? c.failedCount : "—"}
+                            </TableCell>
+                            <TableCell className="text-right text-sm tabular-nums text-sky-700">
+                              {c.openedCount > 0 ? `${c.openedCount} · ${openRate}%` : "—"}
                             </TableCell>
                             <TableCell className="text-right text-sm font-medium tabular-nums">
                               {rate}%

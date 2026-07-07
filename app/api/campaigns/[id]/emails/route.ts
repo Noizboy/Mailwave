@@ -38,6 +38,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           jobTitle: true,
         },
       },
+      deliveryEvents: {
+        where: { eventType: "opened" },
+        take: 1,
+        select: { id: true },
+      },
     },
     orderBy: { createdAt: "asc" },
     skip: (page - 1) * perPage,
@@ -51,5 +56,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     },
   });
 
-  return NextResponse.json({ emails, total, page, pageSize: perPage });
+  const emailsWithOpened = emails.map(({ deliveryEvents, ...e }) => ({
+    ...e,
+    opened: deliveryEvents.length > 0,
+  }));
+
+  return NextResponse.json({ emails: emailsWithOpened, total, page, pageSize: perPage });
 }

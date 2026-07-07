@@ -5,8 +5,7 @@
       "name": "Mailwave Dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 3003,
-      "autoPort": true
+      "port": 3000
     }
   ]
 }

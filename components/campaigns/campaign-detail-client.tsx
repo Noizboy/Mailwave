@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronRight,
   Send,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,6 +67,7 @@ interface EmailRow {
   approvalStatus: string;
   status: string;
   sentAt: string | null;
+  opened?: boolean;
   contact: ContactSnippet;
 }
 
@@ -883,6 +885,12 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                                   Sent
                                 </span>
                               )}
+                              {email.status === "sent" && email.opened && (
+                                <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                                  <Eye className="h-2.5 w-2.5" />
+                                  Opened
+                                </span>
+                              )}
                             </div>
                             {(email.contact.firstName || email.contact.lastName) && (
                               <div className="truncate text-xs text-muted-foreground">
@@ -1144,26 +1152,59 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                     />
                   </div>
                 ) : (
-                  <>
-                    <div className="space-y-1.5">
-                      <Label>Min Interval (minutes)</Label>
-                      <Input
-                        type="number"
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <Label>Sending Interval (minutes)</Label>
+                      <span className="text-xs text-muted-foreground">
+                        {sendingMinInterval}–{sendingMaxInterval} min
+                      </span>
+                    </div>
+                    <div className="relative flex h-8 items-center">
+                      <div className="absolute left-0 right-0 h-1.5 rounded-full bg-muted" />
+                      <div
+                        className="absolute h-1.5 rounded-full bg-foreground"
+                        style={{
+                          left: `${((sendingMinInterval - 1) / 59) * 100}%`,
+                          right: `${100 - ((sendingMaxInterval - 1) / 59) * 100}%`,
+                        }}
+                      />
+                      <div
+                        className="absolute z-10 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-foreground shadow-md pointer-events-none"
+                        style={{ left: `${((sendingMinInterval - 1) / 59) * 100}%` }}
+                      />
+                      <div
+                        className="absolute z-10 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-background bg-foreground shadow-md pointer-events-none"
+                        style={{ left: `${((sendingMaxInterval - 1) / 59) * 100}%` }}
+                      />
+                      <input
+                        type="range"
                         min={1}
+                        max={60}
                         value={sendingMinInterval}
-                        onChange={(e) => setSendingMinInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          setSendingMinInterval(Math.min(v, sendingMaxInterval - 1));
+                        }}
+                        className="absolute h-8 w-full cursor-pointer opacity-0 pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto"
                       />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Max Interval (minutes)</Label>
-                      <Input
-                        type="number"
-                        min={sendingMinInterval}
+                      <input
+                        type="range"
+                        min={1}
+                        max={60}
                         value={sendingMaxInterval}
-                        onChange={(e) => setSendingMaxInterval(Math.max(sendingMinInterval, parseInt(e.target.value) || sendingMinInterval))}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          setSendingMaxInterval(Math.max(v, sendingMinInterval + 1));
+                        }}
+                        className="absolute h-8 w-full cursor-pointer opacity-0 pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto"
                       />
                     </div>
-                  </>
+                    <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
+                      <span>1 min</span>
+                      <span>60 min</span>
+                    </div>
+                    <p className="mt-1.5 text-xs text-muted-foreground">Emails will be sent at a random time within this range, making the campaign appear more natural to spam filters.</p>
+                  </div>
                 )}
               </div>
               <div className="border-t p-6">
