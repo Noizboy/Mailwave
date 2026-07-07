@@ -134,13 +134,9 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
   const { register, handleSubmit, formState: { errors }, trigger, setValue, control, reset } = form;
 
   useEffect(() => {
-    if (step === 4) {
-      setReviewReady(false);
-      const t = setTimeout(() => setReviewReady(true), 300);
-      return () => clearTimeout(t);
-    } else {
-      setReviewReady(false);
-    }
+    if (step !== 4) return;
+    const t = setTimeout(() => setReviewReady(true), 300);
+    return () => clearTimeout(t);
   }, [step]);
 
   const intervalType = useWatch({ control, name: "intervalType" });
@@ -160,10 +156,16 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
 
   const goNext = async () => {
     const valid = await trigger(stepFields[step]);
-    if (valid) setStep((s) => Math.min(s + 1, 4));
+    if (valid) {
+      setReviewReady(false);
+      setStep((s) => Math.min(s + 1, 4));
+    }
   };
 
-  const goBack = () => setStep((s) => Math.max(s - 1, 1));
+  const goBack = () => {
+    setReviewReady(false);
+    setStep((s) => Math.max(s - 1, 1));
+  };
 
   const submitCampaign = async (data: WizardData) => {
     if (step !== 4) return;

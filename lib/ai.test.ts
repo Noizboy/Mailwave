@@ -103,7 +103,7 @@ describe("buildSystemPrompt", () => {
       language: "Spanish",
       emailLength: "short",
     });
-    expect(prompt).toContain("Campaign Goal: Book demos");
+    expect(prompt).toContain("- Goal: Book demos");
     expect(prompt).toContain("Product/Service: MailWave");
     expect(prompt).toContain("Primary CTA: Schedule a call");
     expect(prompt).toContain("Tone: friendly");

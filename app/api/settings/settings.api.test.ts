@@ -32,7 +32,7 @@ const validSmtpBody = {
 
 describe("api/settings", () => {
   beforeAll(() => {
-    process.env.ENCRYPTION_KEY = "settings-test-key";
+    process.env.ENCRYPTION_KEY = "settings-test-key-with-32-chars-min";
   });
 
   beforeEach(() => {

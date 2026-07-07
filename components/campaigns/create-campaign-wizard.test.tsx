@@ -81,7 +81,7 @@ describe("CreateCampaignWizard", () => {
     fireEvent.change(screen.getByPlaceholderText(/discovery call/i), {
       target: { value: "Agendar demo" },
     });
-    fireEvent.change(screen.getByPlaceholderText(/B2B cold email/i), {
+    fireEvent.change(screen.getByPlaceholderText(/MailWave — AI-powered cold email platform for B2B teams/i), {
       target: { value: "Write personalized cold emails targeting CTOs." },
     });
     await advance(); // → 3 (sending defaults are valid)
@@ -107,6 +107,7 @@ describe("CreateCampaignWizard", () => {
       name: "Mi Campaña",
       listId: "list-1",
       goal: "Agendar demo",
+      product: "Write personalized cold emails targeting CTOs.",
       language: "en",
       emailLength: "medium",
       intervalType: "random",

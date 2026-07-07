@@ -1,7 +1,7 @@
 import { Worker, Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS, DEFAULT_MODELS } from "@/lib/ai";
+import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS, DEFAULT_MODELS, type AiProviderName } from "@/lib/ai";
 import { QUEUE_NAMES } from "./queue";
 import { getNotifPrefs } from "./notification-prefs";
 
@@ -68,7 +68,7 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
   const aiConfig = await prisma.aiConfig.findFirst({
     where: {
       userId,
-      ...(providerName ? { provider: providerName as "openai" | "anthropic" | "google_gemini" | "openrouter" | "custom" } : {}),
+      ...(providerName ? { provider: providerName as AiProviderName } : {}),
       status: "connected",
     },
     orderBy: { updatedAt: "desc" },
@@ -82,12 +82,14 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
     throw new Error("No connected AI config found");
   }
 
-  if (!aiConfig.encryptedApiKey) {
+  const provider = aiConfig.provider as AiProviderName;
+  const isCodex = provider === "codex";
+
+  if (!isCodex && !aiConfig.encryptedApiKey) {
     await prisma.campaign.update({ where: { id: campaignId }, data: { status: "failed" } });
     throw new Error("AI config has no API key stored");
   }
-  const apiKey = decrypt(aiConfig.encryptedApiKey);
-  const provider = aiConfig.provider as string;
+  const apiKey = !isCodex ? decrypt(aiConfig.encryptedApiKey!) : "";
   const model = campaign.aiModel ?? aiConfig.model ?? DEFAULT_MODELS[provider] ?? "gpt-4o-mini";
   const baseUrl = aiConfig.baseUrl ?? PROVIDER_BASE_URLS[provider] ?? undefined;
 
@@ -125,12 +127,13 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
       });
 
       const result = await generateEmail({
-        provider: provider as "openai" | "anthropic" | "google_gemini" | "openrouter" | "custom",
+        provider,
         model,
         apiKey,
         baseUrl,
         systemPrompt,
         userPrompt,
+        userId: isCodex ? userId : undefined,
       });
 
       await prisma.campaignEmail.upsert({

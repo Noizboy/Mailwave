@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS, DEFAULT_MODELS } from "@/lib/ai";
+import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS, DEFAULT_MODELS, type AiProviderName } from "@/lib/ai";
 import { APIConnectionError, AuthenticationError, NotFoundError, RateLimitError, PermissionDeniedError } from "openai";
 
 export const runtime = "nodejs";
@@ -12,24 +12,30 @@ export async function POST() {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const config = await prisma.aiConfig.findUnique({ where: { userId: session.user.id } });
-  if (!config || !config.encryptedApiKey) {
+  const provider = config?.provider as AiProviderName | undefined;
+  const isCodex = provider === "codex";
+
+  if (!config || (!isCodex && !config.encryptedApiKey)) {
     return NextResponse.json({ error: "AI not configured" }, { status: 422 });
+  }
+  if (isCodex && !config.oauthConnected) {
+    return NextResponse.json({ error: "Codex not connected" }, { status: 422 });
   }
 
   let success = false;
   let errorMessage: string | null = null;
 
   try {
-    const apiKey = decrypt(config.encryptedApiKey);
-    const provider = config.provider as string;
-    const model = config.model ?? DEFAULT_MODELS[provider] ?? "gpt-4o-mini";
-    const baseUrl = config.baseUrl ?? PROVIDER_BASE_URLS[provider] ?? undefined;
+    const apiKey = !isCodex ? decrypt(config.encryptedApiKey!) : "";
+    const model = config.model ?? DEFAULT_MODELS[provider!] ?? "gpt-4o-mini";
+    const baseUrl = config.baseUrl ?? PROVIDER_BASE_URLS[provider!] ?? undefined;
 
     await generateEmail({
-      provider: provider as "openai" | "anthropic" | "google_gemini" | "openrouter" | "custom",
+      provider: provider!,
       model,
       apiKey,
       baseUrl,
+      userId: isCodex ? session.user.id : undefined,
       systemPrompt: buildSystemPrompt({
         goal: "Test connection",
         tone: "professional",

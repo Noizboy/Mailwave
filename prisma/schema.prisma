@@ -46,17 +46,21 @@ model SmtpConfig {
 }
 
 model AiConfig {
-  id              String             @id @default(cuid())
-  userId          String             @unique
-  provider        AiProvider         @default(openai)
-  model           String?
-  encryptedApiKey String?
-  baseUrl         String?
-  status          AiConnectionStatus @default(disconnected)
-  testedAt        DateTime?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String             @id @default(cuid())
+  userId            String             @unique
+  provider          AiProvider         @default(openai)
+  model             String?
+  encryptedApiKey   String?
+  baseUrl           String?
+  status            AiConnectionStatus @default(disconnected)
+  testedAt          DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  oauthAccessToken  String?
+  oauthRefreshToken String?
+  oauthExpiresAt    DateTime?
+  oauthConnected    Boolean            @default(false)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model SendingAccount {
@@ -319,4 +323,5 @@ enum AiProvider {
   google_gemini
   openrouter
   custom
+  codex
 }

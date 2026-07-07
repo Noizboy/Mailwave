@@ -16,11 +16,15 @@ export async function GET() {
   return NextResponse.json({
     ...config,
     encryptedApiKey: config.encryptedApiKey ? "••••••••" : null,
+    oauthAccessToken: undefined,
+    oauthRefreshToken: undefined,
+    oauthConnected: config.oauthConnected,
+    oauthExpiresAt: config.oauthExpiresAt?.toISOString() ?? null,
   });
 }
 
 const aiSchema = z.object({
-  provider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom"]),
+  provider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom", "codex"]),
   model: z.string().min(1),
   apiKey: z.string().optional(),
   baseUrl: z.string().url().optional().or(z.literal("")),

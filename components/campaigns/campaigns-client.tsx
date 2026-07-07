@@ -370,7 +370,7 @@ export function CampaignsClient() {
         title="Delete campaign?"
         description="This will permanently remove this campaign along with its generated emails and send history. This action cannot be undone."
         confirmLabel="Delete"
-        onConfirm={() => deletingId && handleSingleDelete(deletingId)}
+        onConfirm={() => { if (deletingId) handleSingleDelete(deletingId); }}
       />
 
       {/* Rename dialog */}

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "next/navigation";
-import { CheckCircle, XCircle, Loader2, Eye, EyeOff, Server, Mail, Send } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { CheckCircle, XCircle, Loader2, Eye, EyeOff, Server, Mail, Send, Link, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -243,13 +243,17 @@ function SmtpFormFields({
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [loaded, setLoaded] = useState(!!existingConfig);
-
-  useEffect(() => {
+  const [prevExisting, setPrevExisting] = useState(existingConfig);
+  // Sync local form state when an existing config arrives asynchronously.
+  // Adjusting state during render (gated on a prop-change check) avoids the
+  // cascading-render pattern of calling setState synchronously in an effect.
+  if (existingConfig !== prevExisting) {
+    setPrevExisting(existingConfig);
     if (existingConfig && !loaded) {
       setForm(existingConfig);
       setLoaded(true);
     }
-  }, [existingConfig]);
+  }
 
   const set = (key: string, value: string | number) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -481,19 +485,28 @@ interface AiData {
   baseUrl?: string | null;
   status?: string;
   testedAt?: string | null;
+  oauthConnected?: boolean;
+  oauthExpiresAt?: string | null;
 }
 
+type AiApiProvider = "openai" | "anthropic" | "google_gemini" | "openrouter" | "custom";
+
+const AI_PROVIDERS: { value: AiApiProvider; label: string }[] = [
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "google_gemini", label: "Google Gemini" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "custom", label: "Custom (OpenAI-compatible)" },
+];
+
 function AiSettings() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const [apiKey, setApiKey] = useState("");
-  const [form, setForm] = useState<Partial<AiData>>(() =>
-    queryClient.getQueryData<AiData | null>(["settings-ai"]) ?? { provider: "openai" }
-  );
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [initialized, setInitialized] = useState(() =>
-    queryClient.getQueryData(["settings-ai"]) !== undefined
-  );
+  const toastShown = useRef(false);
+
+  const [setupProvider, setSetupProvider] = useState<AiApiProvider | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const { data: config, isLoading } = useQuery<AiData | null>({
     queryKey: ["settings-ai"],
@@ -504,16 +517,35 @@ function AiSettings() {
     },
   });
 
+  // Show toast from OAuth redirect and clean URL
   useEffect(() => {
-    if (!initialized && !isLoading) {
-      if (config) setForm(config);
-      setInitialized(true);
+    const codex = searchParams.get("codex");
+    if (codex && !toastShown.current) {
+      toastShown.current = true;
+      if (codex === "connected") {
+        toast.success("Codex connected", "Your OpenAI Codex account is now linked.");
+        queryClient.invalidateQueries({ queryKey: ["settings-ai"] });
+      } else if (codex === "error") {
+        toast.error("Codex connection failed", "The OAuth flow failed or was cancelled. Please try again.");
+      }
+      router.replace("/settings?tab=ai");
     }
-  }, [config, isLoading, initialized]);
+  }, [searchParams]);
 
-  const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
+    const res = await fetch("/api/settings/ai/codex/disconnect", { method: "POST" });
+    if (res.ok) {
+      toast.success("Codex disconnected", "Your Codex integration has been removed.");
+      queryClient.invalidateQueries({ queryKey: ["settings-ai"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-status"] });
+    } else {
+      toast.error("Could not disconnect", "An unexpected error occurred. Try again.");
+    }
+    setDisconnecting(false);
+  };
 
-  if (isLoading || !initialized) {
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="py-10 flex items-center justify-center">
@@ -523,19 +555,166 @@ function AiSettings() {
     );
   }
 
+  const isCodexConnected = config?.provider === "codex" && config?.oauthConnected;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">AI Integration</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Connect an AI provider to generate personalized emails for your campaigns.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Codex (OpenAI OAuth) card */}
+          <div className="flex flex-col gap-3 rounded-lg border p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="rounded-md bg-muted p-2 text-foreground">
+                  <Link className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Codex</p>
+                  <p className="text-xs text-muted-foreground">OpenAI OAuth</p>
+                </div>
+              </div>
+              {isCodexConnected && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                  <CheckCircle className="h-3 w-3" /> Connected
+                </span>
+              )}
+            </div>
+            {isCodexConnected ? (
+              <div className="space-y-2">
+                {config.oauthExpiresAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Token expires: {new Date(config.oauthExpiresAt).toLocaleString()}
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleDisconnect}
+                  disabled={disconnecting}
+                >
+                  {disconnecting ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Disconnecting...</>
+                  ) : (
+                    <><Unlink className="h-3.5 w-3.5 mr-1.5" /> Disconnect</>
+                  )}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                className="w-full"
+                onClick={() => { window.location.href = "/api/settings/ai/codex/connect"; }}
+              >
+                Connect with Codex
+              </Button>
+            )}
+          </div>
+
+          {/* API-key provider cards */}
+          {AI_PROVIDERS.map((p) => {
+            const isActive = config?.provider === p.value && !config?.oauthConnected;
+            return (
+              <div
+                key={p.value}
+                className="flex flex-col gap-3 rounded-lg border p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-md bg-muted p-2 text-foreground">
+                      <Server className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{p.label}</p>
+                      <p className="text-xs text-muted-foreground">API key</p>
+                    </div>
+                  </div>
+                  {isActive && config?.status && <StatusBadge status={config.status} />}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setSetupProvider(p.value)}
+                >
+                  {isActive ? "Edit" : "Configure"}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* API-key config dialog */}
+        <Dialog open={!!setupProvider} onOpenChange={(open) => !open && setSetupProvider(null)}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {setupProvider
+                  ? (AI_PROVIDERS.find((p) => p.value === setupProvider)?.label ?? "AI Provider")
+                  : "Configure AI Provider"}
+              </DialogTitle>
+              <DialogDescription>
+                Enter your API credentials to connect this provider.
+              </DialogDescription>
+            </DialogHeader>
+            {setupProvider && (
+              <AiApiKeyForm
+                provider={setupProvider}
+                existingConfig={config?.provider === setupProvider ? config : null}
+                onSaved={() => {
+                  setSetupProvider(null);
+                  queryClient.invalidateQueries({ queryKey: ["settings-ai"] });
+                  queryClient.invalidateQueries({ queryKey: ["ai-status"] });
+                }}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AiApiKeyForm({
+  provider,
+  existingConfig,
+  onSaved,
+}: {
+  provider: AiApiProvider;
+  existingConfig: AiData | null;
+  onSaved: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [apiKey, setApiKey] = useState("");
+  const [model, setModel] = useState(existingConfig?.model ?? "");
+  const [baseUrl, setBaseUrl] = useState(existingConfig?.baseUrl ?? "");
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
   const handleSave = async () => {
     setSaving(true);
     const res = await fetch("/api/settings/ai", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, ...(apiKey ? { apiKey } : {}) }),
+      body: JSON.stringify({
+        provider,
+        model: model || undefined,
+        baseUrl: baseUrl || undefined,
+        ...(apiKey ? { apiKey } : {}),
+      }),
     });
     if (res.ok) {
       toast.success("AI settings saved", "Your AI provider configuration has been updated.");
       setApiKey("");
-      queryClient.invalidateQueries({ queryKey: ["settings-ai"] });
+      onSaved();
     } else {
-      toast.error("Could not save AI settings", "An unexpected error occurred. Check your inputs and try again.");
+      toast.error("Could not save AI settings", "Check your inputs and try again.");
     }
     setSaving(false);
   };
@@ -555,78 +734,58 @@ function AiSettings() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">AI Configuration</CardTitle>
-          {config?.status && <StatusBadge status={config.status} />}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <SettingField label="AI Provider">
-          <Select value={form.provider ?? "openai"} onValueChange={(v) => set("provider", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="anthropic">Anthropic</SelectItem>
-              <SelectItem value="google_gemini">Google Gemini</SelectItem>
-              <SelectItem value="openrouter">OpenRouter</SelectItem>
-              <SelectItem value="custom">Custom (OpenAI-compatible)</SelectItem>
-            </SelectContent>
-          </Select>
-        </SettingField>
-        <SettingField label="API Key">
+    <div className="space-y-4">
+      <SettingField label="API Key">
+        <Input
+          type="password"
+          value={existingConfig?.id && !apiKey ? "••••••••••••••••" : apiKey}
+          onChange={(e) => {
+            const v = e.target.value;
+            setApiKey(v.startsWith("••••••••••••••••") ? v.slice(16) : v);
+          }}
+          onFocus={(e) => { if (existingConfig?.id && !apiKey) e.target.select(); }}
+          placeholder="sk-..."
+          autoComplete="off"
+        />
+      </SettingField>
+      <SettingField label="Model">
+        <Input
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          placeholder="e.g. gpt-4o-mini"
+        />
+      </SettingField>
+      {(provider === "custom" || provider === "openrouter") && (
+        <SettingField label="Base URL">
           <Input
-            type="password"
-            value={config?.id && !apiKey ? "••••••••••••••••" : apiKey}
-            onChange={(e) => {
-              const v = e.target.value;
-              setApiKey(v.startsWith("••••••••••••••••") ? v.slice(16) : v);
-            }}
-            onFocus={(e) => { if (config?.id && !apiKey) e.target.select(); }}
-            placeholder="sk-..."
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://..."
           />
         </SettingField>
-        <SettingField label="Model">
-          <Input
-            value={form.model ?? ""}
-            onChange={(e) => set("model", e.target.value)}
-            placeholder="e.g. gpt-4o-mini, anthropic/claude-haiku-4-5 (OpenRouter uses hyphens)"
-            required
-          />
-        </SettingField>
-        {(form.provider === "custom" || form.provider === "openrouter") && (
-          <SettingField label="Base URL">
-            <Input
-              value={form.baseUrl ?? ""}
-              onChange={(e) => set("baseUrl", e.target.value)}
-              placeholder="https://..."
-            />
-          </SettingField>
-        )}
-        <div className="flex gap-2 pt-2">
-          <Button onClick={handleSave} disabled={saving} className="flex-1">
-            {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : "Save Settings"}
-          </Button>
-          <Button variant="outline" onClick={handleTest} disabled={testing || !config?.id}>
-            {testing ? <><Loader2 className="h-4 w-4 animate-spin" /> Testing...</> : "Test Connection"}
-          </Button>
+      )}
+      <div className="flex gap-2 pt-1">
+        <Button onClick={handleSave} disabled={saving} className="flex-1">
+          {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : "Save Settings"}
+        </Button>
+        <Button variant="outline" onClick={handleTest} disabled={testing || !existingConfig?.id}>
+          {testing ? <><Loader2 className="h-4 w-4 animate-spin" /> Testing...</> : "Test Connection"}
+        </Button>
+      </div>
+      {existingConfig?.status === "connected" && (
+        <div className="flex items-center gap-2 text-sm text-green-700">
+          <CheckCircle className="h-4 w-4" />
+          Connection verified
+          {existingConfig.testedAt && ` — ${new Date(existingConfig.testedAt).toLocaleString()}`}
         </div>
-        {config?.status === "connected" && (
-          <div className="flex items-center gap-2 text-sm text-green-700">
-            <CheckCircle className="h-4 w-4" />
-            Connection verified
-            {config.testedAt && ` — ${new Date(config.testedAt).toLocaleString()}`}
-          </div>
-        )}
-        {config?.status === "failed" && (
-          <div className="flex items-center gap-2 text-sm text-red-600">
-            <XCircle className="h-4 w-4" />
-            Last test failed
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      )}
+      {existingConfig?.status === "failed" && (
+        <div className="flex items-center gap-2 text-sm text-red-600">
+          <XCircle className="h-4 w-4" />
+          Last test failed
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -654,11 +813,15 @@ function SendingLimitsSettings() {
     },
   });
 
-  useEffect(() => {
+  const [prevLimits, setPrevLimits] = useState(limitsData);
+  // Populate form once when the fetched limits arrive (render-time adjustment
+  // avoids setState-in-effect).
+  if (limitsData !== prevLimits) {
+    setPrevLimits(limitsData);
     if (limitsData && form === null) {
       setForm(limitsData);
     }
-  }, [limitsData]);
+  }
 
   const setNum = (key: keyof LimitsData, value: string) =>
     setForm((f) => f ? { ...f, [key]: parseInt(value) || 0 } : f);
@@ -763,11 +926,15 @@ function AccountSettings() {
     },
   });
 
-  useEffect(() => {
+  const [prevUser, setPrevUser] = useState(user);
+  // Populate the name field once when the account loads (render-time
+  // adjustment avoids setState-in-effect).
+  if (user !== prevUser) {
+    setPrevUser(user);
     if (user && name === null) {
       setName(user.name ?? "");
     }
-  }, [user]);
+  }
 
   if (isLoading || name === null) {
     return (

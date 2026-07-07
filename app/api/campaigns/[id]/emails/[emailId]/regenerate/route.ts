@@ -96,8 +96,8 @@ export async function POST(
             promptUsed: userPrompt,
             modelUsed: model,
             generatedAt: new Date(),
-            status: "generated",
-            approvalStatus: "pending",
+            status: "generated" as const,
+            approvalStatus: "pending" as const,
             errorReason: null,
           };
 

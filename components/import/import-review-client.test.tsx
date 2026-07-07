@@ -131,7 +131,8 @@ describe("ImportReviewClient", () => {
     fireEvent.click(screen.getByRole("button", { name: /save contacts/i }));
     await screen.findByText(/valid contacts will be saved/);
 
-    fireEvent.change(screen.getByPlaceholderText(/Tech Leaders/), {
+    fireEvent.click(screen.getByRole("button", { name: /new list/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Tech Leaders Q1/), {
       target: { value: "Imported Q3" },
     });
     fireEvent.click(screen.getByRole("button", { name: /create list & save/i }));

@@ -1,8 +1,13 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { isBlocked, recordFailure, resetFailures } from "@/lib/rate-limit";
+
+class RateLimitError extends CredentialsSignin {
+  code = "rate_limit";
+}
 
 const loginSchema = z.object({
   email: z.email(),
@@ -20,18 +25,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
+        const ip =
+          (req as Request).headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+          (req as Request).headers.get("x-real-ip") ??
+          "unknown";
+        const key = `login:${ip}`;
+
+        const { blocked, retryAfterSeconds } = isBlocked(key);
+        if (blocked) throw new RateLimitError(`Try again in ${retryAfterSeconds}s`);
+
         const parsed = loginSchema.safeParse(credentials);
-        if (!parsed.success) return null;
+        if (!parsed.success) {
+          recordFailure(key);
+          return null;
+        }
 
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email },
         });
-        if (!user) return null;
+        if (!user) {
+          recordFailure(key);
+          return null;
+        }
 
         const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
-        if (!valid) return null;
+        if (!valid) {
+          recordFailure(key);
+          return null;
+        }
 
+        resetFailures(key);
         return { id: user.id, email: user.email, name: user.name };
       },
     }),

@@ -16,6 +16,7 @@
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
+    "rotate-key": "tsx scripts/rotate-encryption-key.ts",
     "worker": "tsx --env-file=.env jobs/worker.ts"
   },
   "dependencies": {

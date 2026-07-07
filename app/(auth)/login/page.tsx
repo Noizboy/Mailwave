@@ -48,7 +48,9 @@ function LoginForm() {
       redirect: false,
     });
     setLoading(false);
-    if (result?.error) {
+    if (result?.code === "rate_limit") {
+      setError("Too many failed attempts. Please wait 15 minutes and try again.");
+    } else if (result?.error) {
       setError("Invalid email or password.");
     } else {
       router.push(callbackUrl);

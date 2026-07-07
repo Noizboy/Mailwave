@@ -109,11 +109,20 @@ export function ContactEditDialog({ contactId, open, onOpenChange }: ContactEdit
   const status = useWatch({ control, name: "status" }) ?? "subscribed";
   const [listId, setListId] = useState<string>(NO_LIST_VALUE);
   const [newListName, setNewListName] = useState<string>("");
+  const [prevContact, setPrevContact] = useState<typeof contact>(undefined);
+  // Adjust local state when the loaded contact changes — the render-time
+  // update avoids calling setState synchronously inside an effect.
+  if (contact !== prevContact) {
+    setPrevContact(contact);
+    if (contact) {
+      setListId(contact.listMembers[0]?.list.id ?? NO_LIST_VALUE);
+      setNewListName("");
+    }
+  }
   const isNewList = listId === NEW_LIST_VALUE;
 
   useEffect(() => {
     if (contact && lists) {
-      const currentListId = contact.listMembers[0]?.list.id ?? NO_LIST_VALUE;
       const linkedin = contact.customFields?.linkedin ?? "";
       reset({
         email: contact.email,
@@ -125,8 +134,6 @@ export function ContactEditDialog({ contactId, open, onOpenChange }: ContactEdit
         aiHint: contact.aiHint ?? "",
         status: contact.status as EditData["status"],
       });
-      setListId(currentListId);
-      setNewListName("");
     }
   }, [contact, lists, reset]);
 
