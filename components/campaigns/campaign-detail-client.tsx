@@ -189,6 +189,9 @@ const EMAIL_LENGTH_LABELS: Record<string, string> = {
 
 function getNextEmailLabel(campaign: CampaignDetail): string | null {
   if (campaign.status !== "sending") return null;
+  // No more emails to process — don't show a countdown
+  const processed = campaign.sentCount + campaign.failedCount + campaign.skippedCount;
+  if (processed >= campaign.totalEmails) return null;
   const sentEmails = campaign.emails.filter((e) => e.status === "sent" && e.sentAt);
   if (!sentEmails.length) return null;
   const lastSentMs = Math.max(...sentEmails.map((e) => new Date(e.sentAt!).getTime()));
@@ -612,7 +615,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
 
   const percent =
     campaign.totalEmails > 0
-      ? Math.round(((campaign.sentCount + campaign.failedCount) / campaign.totalEmails) * 100)
+      ? Math.round(((campaign.sentCount + campaign.failedCount + campaign.skippedCount) / campaign.totalEmails) * 100)
       : 0;
 
   const generatedCount = campaign.emails.filter((e) => e.status === "generated").length;

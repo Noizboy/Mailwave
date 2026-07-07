@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Reset all emails for a full (re-)generation
     await prisma.campaignEmail.updateMany({
       where: { campaignId: campaign.id },
-      data: { status: "pending", errorReason: null },
+      data: { status: "pending", errorReason: null, sentAt: null },
     });
     // Reset send counters so the progress bar starts fresh
     await prisma.campaign.update({
