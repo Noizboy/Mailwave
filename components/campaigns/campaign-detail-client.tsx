@@ -612,7 +612,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
 
   const percent =
     campaign.totalEmails > 0
-      ? Math.round((campaign.sentCount / campaign.totalEmails) * 100)
+      ? Math.round(((campaign.sentCount + campaign.failedCount) / campaign.totalEmails) * 100)
       : 0;
 
   const generatedCount = campaign.emails.filter((e) => e.status === "generated").length;

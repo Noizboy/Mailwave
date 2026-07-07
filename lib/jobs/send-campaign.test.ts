@@ -264,6 +264,24 @@ describe("processSend", () => {
         }),
       })
     );
+    // failedCount is incremented per-email so the progress bar reflects failures immediately
+    expect(prisma.campaign.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { failedCount: { increment: 1 } } })
+    );
+  });
+
+  it("increments skippedCount per-email when contact hits the send cap", async () => {
+    mocked(prisma.sendingAccount.findUnique).mockResolvedValue({ suppressAfterEmails: 3 } as never);
+    mocked(prisma.campaignEmail.findMany).mockResolvedValue([
+      approvedEmail("e1", "c1", 3), // at cap → skipped
+      approvedEmail("e2", "c2", 0),
+    ] as never);
+
+    await processSend(fakeJob());
+
+    expect(prisma.campaign.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { skippedCount: { increment: 1 } } })
+    );
   });
 
   it("stops mid-run when the campaign is paused between sends", async () => {

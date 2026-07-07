@@ -118,6 +118,10 @@ export async function processSend(job: Job<SendCampaignJobData>) {
         where: { id: email.id },
         data: { status: "skipped", errorReason: "Contact suppressed: send limit reached" },
       });
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { skippedCount: { increment: 1 } },
+      });
       continue;
     }
 
@@ -177,6 +181,11 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       });
       failCount++;
 
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { failedCount: { increment: 1 } },
+      });
+
       // NOTIF-006: one bounce notification per campaign per hour
       if (prefs.email_bounced) {
         const oneHourAgo = new Date(Date.now() - 3600000);
@@ -229,7 +238,6 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     where: { id: campaignId },
     data: {
       status: finalStatus,
-      failedCount: { increment: failCount },
       ...(finalStatus === "completed" ? { completedAt: new Date() } : {}),
     },
   });
