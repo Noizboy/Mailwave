@@ -3,12 +3,13 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { validatePassword } from "@/lib/password-policy";
 
 export const runtime = "nodejs";
 
 const schema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8, "Password must be at least 8 characters"),
+  newPassword: z.string().min(1),
 });
 
 export async function POST(req: NextRequest) {
@@ -22,6 +23,18 @@ export async function POST(req: NextRequest) {
   }
 
   const { currentPassword, newPassword } = parsed.data;
+
+  // Reject same-as-current — a common policy requirement and also prevents
+  // the breach-list check from flagging the (valid) current password.
+  if (currentPassword === newPassword) {
+    return NextResponse.json({ error: "New password must be different from the current one." }, { status: 400 });
+  }
+
+  // Full policy: length + local denylist + HIBP breach-list check (CN-011).
+  const policy = await validatePassword(newPassword);
+  if (!policy.ok) {
+    return NextResponse.json({ error: policy.reason ?? "Password is not strong enough." }, { status: 400 });
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -38,5 +51,9 @@ export async function POST(req: NextRequest) {
     data: { passwordHash: newHash },
   });
 
-  return NextResponse.json({ ok: true });
+  const response: { ok: true; warning?: string } = { ok: true };
+  if (policy.breachCheckSkipped) {
+    response.warning = "Breached-password database was unreachable. Your password was set, but please consider changing it again later to verify it hasn't been leaked.";
+  }
+  return NextResponse.json(response);
 }

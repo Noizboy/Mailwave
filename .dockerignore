@@ -1,0 +1,47 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Dependencies (reinstalled in the build stage)
+node_modules
+
+# Build outputs
+.next
+out
+build
+coverage
+playwright-report
+test-results
+
+# Local secrets & runtime artifacts — must never enter the image (CN-009)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+!.env.docker.prod.example
+cookies.txt
+*.log
+stub.log
+worker.log
+worker_err.log
+
+# Test / scratch files
+e2e
+test
+testsprite_tests
+lighthouse-reports
+*.test.ts
+*.test.tsx
+vitest.config.ts
+vitest.setup.ts
+playwright.config.ts
+test-contacts.csv
+support.js
+MailWaveMockup.html
+.thumbnail
+
+# Skill / tooling vendored in the repo (not needed at runtime)
+.opencode
+.claude
+docs

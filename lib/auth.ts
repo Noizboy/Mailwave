@@ -11,7 +11,10 @@ class RateLimitError extends CredentialsSignin {
 
 const loginSchema = z.object({
   email: z.email(),
-  password: z.string().min(8),
+  // Login accepts any non-empty password — the strength policy (CN-011) is
+  // enforced at password-change time, not at login, so users with older
+  // weaker passwords can still authenticate and then upgrade.
+  password: z.string().min(1),
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -30,14 +33,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           (req as Request).headers.get("x-forwarded-for")?.split(",")[0].trim() ??
           (req as Request).headers.get("x-real-ip") ??
           "unknown";
-        const key = `login:${ip}`;
 
-        const { blocked, retryAfterSeconds } = isBlocked(key);
-        if (blocked) throw new RateLimitError(`Try again in ${retryAfterSeconds}s`);
+        const parsed0 = loginSchema.safeParse(credentials);
+        // Composite key: defeats both IP rotation (still blocked per-account)
+        // and single-IP credential stuffing across many accounts (CN-004).
+        const emailKey = parsed0.success ? parsed0.data.email.toLowerCase() : "unknown";
+        const ipKey = `login:ip:${ip}`;
+        const accountKey = `login:acct:${emailKey}`;
 
-        const parsed = loginSchema.safeParse(credentials);
+        const ipBlock = await isBlocked(ipKey);
+        const acctBlock = await isBlocked(accountKey);
+        if (ipBlock.blocked) throw new RateLimitError(`Try again in ${ipBlock.retryAfterSeconds}s`);
+        if (acctBlock.blocked) throw new RateLimitError(`Try again in ${acctBlock.retryAfterSeconds}s`);
+
+        const parsed = parsed0;
         if (!parsed.success) {
-          recordFailure(key);
+          await recordFailure(ipKey);
           return null;
         }
 
@@ -45,17 +56,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { email: parsed.data.email },
         });
         if (!user) {
-          recordFailure(key);
+          await recordFailure(ipKey);
+          await recordFailure(accountKey);
           return null;
         }
 
         const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
         if (!valid) {
-          recordFailure(key);
+          await recordFailure(ipKey);
+          await recordFailure(accountKey);
           return null;
         }
 
-        resetFailures(key);
+        await resetFailures(ipKey);
+        await resetFailures(accountKey);
         return { id: user.id, email: user.email, name: user.name };
       },
     }),

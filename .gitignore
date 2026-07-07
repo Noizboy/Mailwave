@@ -24,6 +24,13 @@
 .DS_Store
 *.pem
 
+# local runtime artifacts (CN-009: never commit session cookies or logs)
+cookies.txt
+stub.log
+worker.log
+worker_err.log
+*.log
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -32,6 +39,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+!.env.docker.example
+!.env.docker.prod.example
 
 # vercel
 .vercel
@@ -46,5 +56,11 @@ next-env.d.ts
 /e2e/.auth/
 /playwright-report/
 /test-results/
+/lighthouse-reports/
+/testsprite_tests/
 
-testsprite_tests\tmp\config.json
+# scratch / vendor artifacts not part of the product
+/support.js
+/test-contacts.csv
+/MailWaveMockup.html
+/.thumbnail

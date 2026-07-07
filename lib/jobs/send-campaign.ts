@@ -6,6 +6,7 @@ import nodemailer from "nodemailer";
 import { QUEUE_NAMES, getSendQueue } from "./queue";
 import { getNotifPrefs } from "./notification-prefs";
 import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
+import { signEmailId } from "@/lib/track-sign";
 
 export interface SendCampaignJobData {
   campaignId: string;
@@ -79,7 +80,8 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     port: smtpConfig.port ?? 587,
     secure: smtpConfig.encryption === "ssl",
     auth: { user: smtpConfig.username!, pass: smtpPassword },
-    ...(smtpConfig.encryption === "none" ? { tls: { rejectUnauthorized: false } } : {}),
+    // Never disable certificate validation — see CN-007. The "none" mode
+    // means no TLS is used; for "tls"/"ssl" the default validation applies.
   });
 
   // Get sending limits for this user
@@ -204,7 +206,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     try {
       const appUrl = process.env.NEXTAUTH_URL ?? "";
       const htmlBody = (email.body ?? "").replace(/\n/g, "<br>");
-      const pixelUrl = `${appUrl}/api/track/${email.id}`;
+      const pixelUrl = `${appUrl}/api/track/${email.id}?s=${signEmailId(email.id)}`;
 
       await transporter.sendMail({
         from: `"${smtpConfig.fromName ?? ""}" <${smtpConfig.fromEmail}>`,
@@ -230,13 +232,16 @@ export async function processSend(job: Job<SendCampaignJobData>) {
         },
       });
 
-      // Increment contact sent count and auto-suppress when limit is reached
-      const newCount = email.contact.emailsSentCount + 1;
+      // Increment contact sent count atomically and auto-suppress when the
+      // limit is reached. Uses DB-side increment to stay correct under
+      // concurrent workers (avoids read-modify-write races that could
+      // otherwise bypass the suppression threshold).
+      const projectedNewCount = email.contact.emailsSentCount + 1;
       await prisma.contact.update({
         where: { id: email.contact.id },
         data: {
-          emailsSentCount: newCount,
-          ...(newCount >= suppressAfterEmails ? { status: "suppressed" } : {}),
+          emailsSentCount: { increment: 1 },
+          ...(projectedNewCount >= suppressAfterEmails ? { status: "suppressed" } : {}),
         },
       });
 

@@ -26,21 +26,25 @@ export async function POST() {
   }
 
   const config = await prisma.aiConfig.findUnique({ where: { userId: session.user.id } });
-  const provider = config?.provider as AiProviderName | undefined;
-  const isCodex = provider === "codex";
+  const providerName = config?.provider as string | undefined;
 
-  if (!config || (!isCodex && !config.encryptedApiKey)) {
-    return NextResponse.json({ error: "AI not configured" }, { status: 422 });
+  if (providerName === "codex") {
+    return NextResponse.json(
+      { error: "Codex integration is no longer supported. Choose an API-key provider in AI Integration." },
+      { status: 422 }
+    );
   }
-  if (isCodex && !config.oauthConnected) {
-    return NextResponse.json({ error: "Codex not connected" }, { status: 422 });
+
+  if (!config || !config.encryptedApiKey) {
+    return NextResponse.json({ error: "AI not configured" }, { status: 422 });
   }
 
   let success = false;
   let errorMessage: string | null = null;
 
   try {
-    const apiKey = !isCodex ? decrypt(config.encryptedApiKey!) : "";
+    const provider = providerName as AiProviderName;
+    const apiKey = decrypt(config.encryptedApiKey);
     const model = config.model ?? DEFAULT_MODELS[provider!] ?? "gpt-4o-mini";
     const baseUrl = config.baseUrl ?? PROVIDER_BASE_URLS[provider!] ?? undefined;
 
@@ -49,7 +53,6 @@ export async function POST() {
       model,
       apiKey,
       baseUrl,
-      userId: isCodex ? session.user.id : undefined,
       systemPrompt: buildSystemPrompt({
         goal: "Test connection",
         tone: "professional",
@@ -62,7 +65,7 @@ export async function POST() {
     success = true;
   } catch (err) {
     console.error("[AI test] provider=%s error=%s status=%s msg=%s",
-      provider,
+      providerName,
       err instanceof Error ? err.constructor.name : typeof err,
       (err as { status?: number }).status ?? "n/a",
       err instanceof Error ? err.message : String(err),
@@ -123,17 +126,25 @@ function friendlyAiError(err: unknown): string {
     if (name === "BadRequestError") {
       return "Bad request. For OpenRouter, use the format 'provider/model' (e.g. openai/gpt-4o-mini).";
     }
+    if (name === "UnprocessableEntityError") {
+      return "The provider rejected the model or request. Check the model name is valid for this provider.";
+    }
+    // Fallback: if the error has a status code, surface it directly
+    const status = (err as { status?: number }).status;
+    if (typeof status === "number") {
+      if (status === 402) return "Insufficient credits on your provider account. Add credits and try again.";
+      console.error("[AI test] API error status=%s name=%s msg=%s", status, name, err.message);
+      return `Provider error (${status}): ${err.message}`;
+    }
+    console.error("[AI test] Unrecognized error:", name, err.message);
   }
   // Catch-all for any remaining OpenAI SDK API errors (e.g. 402 payment required)
   if (err instanceof APIError) {
     if (err.status === 402) {
-      return "Insufficient credits on your OpenRouter account. Add credits and try again.";
+      return "Insufficient credits on your provider account. Add credits and try again.";
     }
     console.error("[AI test] APIError status=%s message=%s", err.status, err.message);
     return `Provider error (${err.status}): ${err.message}`;
-  }
-  if (err instanceof Error) {
-    console.error("[AI test] Unrecognized error:", err.constructor.name, err.message);
   }
   return "An unexpected error occurred. Check your provider settings and try again.";
 }

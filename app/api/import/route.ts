@@ -5,6 +5,10 @@ import { parseCsvText, buildColumnMapping, detectEmailColumn, validateEmail } fr
 
 export const runtime = "nodejs";
 
+// Caps to prevent memory exhaustion from oversized uploads (CN-008).
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_ROWS = 10_000;
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -23,6 +27,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "File must be a CSV." }, { status: 400 });
   }
 
+  // Reject oversized uploads before reading the body into memory.
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: `CSV must be at most ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.` },
+      { status: 413 }
+    );
+  }
+
   const text = await file.text();
   const parsed = parseCsvText(text);
 
@@ -32,6 +44,13 @@ export async function POST(req: NextRequest) {
 
   if (parsed.rowCount === 0) {
     return NextResponse.json({ errors: ["CSV has no data rows."] }, { status: 422 });
+  }
+
+  if (parsed.rowCount > MAX_ROWS) {
+    return NextResponse.json(
+      { errors: [`CSV has ${parsed.rowCount} rows; the maximum is ${MAX_ROWS}.`] },
+      { status: 413 }
+    );
   }
 
   const emailCol = detectEmailColumn(parsed.headers);

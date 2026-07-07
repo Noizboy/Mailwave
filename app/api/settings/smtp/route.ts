@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
+import { assertSafeHost } from "@/lib/ssrf";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -46,6 +47,12 @@ export async function PUT(req: NextRequest) {
   }
 
   const { password, ...rest } = parsed.data;
+
+  // SSRF check on the SMTP host before persisting (CN-005).
+  const hostCheck = await assertSafeHost(rest.host);
+  if (!hostCheck.ok) {
+    return NextResponse.json({ error: hostCheck.reason ?? "Invalid SMTP host." }, { status: 400 });
+  }
 
   const existing = await prisma.smtpConfig.findUnique({ where: { userId: session.user.id } });
 

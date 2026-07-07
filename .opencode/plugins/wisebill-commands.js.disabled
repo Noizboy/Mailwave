@@ -1,0 +1,105 @@
+import path from "node:path"
+import { spawn } from "node:child_process"
+
+function resolveRepoRoot(meta) {
+  return path.resolve(path.dirname(meta.target), "..", "..")
+}
+
+function runShell(command, cwd) {
+  return new Promise((resolve) => {
+    const child = spawn("bash", ["-lc", command], {
+      cwd,
+      env: process.env,
+    })
+
+    let stdout = ""
+    let stderr = ""
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString()
+    })
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString()
+    })
+
+    child.on("error", (error) => {
+      resolve({
+        ok: false,
+        output: error.message,
+      })
+    })
+
+    child.on("close", (code) => {
+      const output = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n\n")
+      resolve({
+        ok: code === 0,
+        output,
+      })
+    })
+  })
+}
+
+function showResult(api, dialog, title, result) {
+  const message = result.output || "Command completed with no output."
+
+  api.ui.toast({
+    variant: result.ok ? "success" : "error",
+    title,
+    message: result.ok ? "Completed." : "Failed.",
+  })
+
+  dialog?.replace(() =>
+    api.ui.DialogAlert({
+      title,
+      message,
+    }),
+  )
+}
+
+function createCommand(api, repoRoot, name, description, command, title) {
+  return {
+    title,
+    value: `wisebill.${name}`,
+    description,
+    category: "Wisebill",
+    suggested: true,
+    slash: { name },
+    onSelect: async (dialog) => {
+      api.ui.toast({
+        variant: "info",
+        title,
+        message: "Running...",
+      })
+
+      const result = await runShell(command, repoRoot)
+      showResult(api, dialog, title, result)
+    },
+  }
+}
+
+export const tui = async (api, _options, meta) => {
+  if (!api.command) return
+
+  const repoRoot = resolveRepoRoot(meta)
+  const unregister = api.command.register(() => [
+    createCommand(
+      api,
+      repoRoot,
+      "open",
+      "Open Wisebill SSE services without using AI",
+      "TERMINAL_BIN=gnome-terminal bash ./!open",
+      "Wisebill /open",
+    ),
+    createCommand(
+      api,
+      repoRoot,
+      "stop",
+      "Stop Wisebill dev services without using AI",
+      "bash ./!stop",
+      "Wisebill /stop",
+    ),
+  ])
+
+  api.lifecycle.onDispose(unregister)
+}

@@ -1,0 +1,22 @@
+# Enforce LF line endings for files consumed by Linux containers.
+# Shell scripts and Dockerfiles must not be CRLF or the container will fail
+# with "$'\r': command not found".
+*.sh         text eol=lf
+Dockerfile*  text eol=lf
+docker-compose*.yml text eol=lf
+*.dockerfile text eol=lf
+
+# Normalize source files (editor-agnostic) but let Git auto-detect binaries.
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Secrets / binaries — never touch line endings.
+*.pem  binary
+*.png  binary
+*.jpg  binary
+*.ico  binary

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams, useRouter } from "next/navigation";
-import { CheckCircle, XCircle, Loader2, Eye, EyeOff, Server, Mail, Send, Link, Unlink } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { CheckCircle, XCircle, Loader2, Eye, EyeOff, Server, Mail, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -485,8 +485,6 @@ interface AiData {
   baseUrl?: string | null;
   status?: string;
   testedAt?: string | null;
-  oauthConnected?: boolean;
-  oauthExpiresAt?: string | null;
 }
 
 type AiApiProvider = "openai" | "anthropic" | "google_gemini" | "openrouter" | "custom";
@@ -500,13 +498,10 @@ const AI_PROVIDERS: { value: AiApiProvider; label: string }[] = [
 ];
 
 function AiSettings() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const toastShown = useRef(false);
 
+  const [selecting, setSelecting] = useState(false);
   const [setupProvider, setSetupProvider] = useState<AiApiProvider | null>(null);
-  const [disconnecting, setDisconnecting] = useState(false);
 
   const { data: config, isLoading } = useQuery<AiData | null>({
     queryKey: ["settings-ai"],
@@ -516,34 +511,6 @@ function AiSettings() {
       return res.json();
     },
   });
-
-  // Show toast from OAuth redirect and clean URL
-  useEffect(() => {
-    const codex = searchParams.get("codex");
-    if (codex && !toastShown.current) {
-      toastShown.current = true;
-      if (codex === "connected") {
-        toast.success("Codex connected", "Your OpenAI Codex account is now linked.");
-        queryClient.invalidateQueries({ queryKey: ["settings-ai"] });
-      } else if (codex === "error") {
-        toast.error("Codex connection failed", "The OAuth flow failed or was cancelled. Please try again.");
-      }
-      router.replace("/settings?tab=ai");
-    }
-  }, [searchParams]);
-
-  const handleDisconnect = async () => {
-    setDisconnecting(true);
-    const res = await fetch("/api/settings/ai/codex/disconnect", { method: "POST" });
-    if (res.ok) {
-      toast.success("Codex disconnected", "Your Codex integration has been removed.");
-      queryClient.invalidateQueries({ queryKey: ["settings-ai"] });
-      queryClient.invalidateQueries({ queryKey: ["ai-status"] });
-    } else {
-      toast.error("Could not disconnect", "An unexpected error occurred. Try again.");
-    }
-    setDisconnecting(false);
-  };
 
   if (isLoading) {
     return (
@@ -555,102 +522,11 @@ function AiSettings() {
     );
   }
 
-  const isCodexConnected = config?.provider === "codex" && config?.oauthConnected;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">AI Integration</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Connect an AI provider to generate personalized emails for your campaigns.
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {/* Codex (OpenAI OAuth) card */}
-          <div className="flex flex-col gap-3 rounded-lg border p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="rounded-md bg-muted p-2 text-foreground">
-                  <Link className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Codex</p>
-                  <p className="text-xs text-muted-foreground">OpenAI OAuth</p>
-                </div>
-              </div>
-              {isCodexConnected && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                  <CheckCircle className="h-3 w-3" /> Connected
-                </span>
-              )}
-            </div>
-            {isCodexConnected ? (
-              <div className="space-y-2">
-                {config.oauthExpiresAt && (
-                  <p className="text-xs text-muted-foreground">
-                    Token expires: {new Date(config.oauthExpiresAt).toLocaleString()}
-                  </p>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={handleDisconnect}
-                  disabled={disconnecting}
-                >
-                  {disconnecting ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Disconnecting...</>
-                  ) : (
-                    <><Unlink className="h-3.5 w-3.5 mr-1.5" /> Disconnect</>
-                  )}
-                </Button>
-              </div>
-            ) : (
-              <Button
-                size="sm"
-                className="w-full"
-                onClick={() => { window.location.href = "/api/settings/ai/codex/connect"; }}
-              >
-                Connect with Codex
-              </Button>
-            )}
-          </div>
-
-          {/* API-key provider cards */}
-          {AI_PROVIDERS.map((p) => {
-            const isActive = config?.provider === p.value && !config?.oauthConnected;
-            return (
-              <div
-                key={p.value}
-                className="flex flex-col gap-3 rounded-lg border p-4"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="rounded-md bg-muted p-2 text-foreground">
-                      <Server className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{p.label}</p>
-                      <p className="text-xs text-muted-foreground">API key</p>
-                    </div>
-                  </div>
-                  {isActive && config?.status && <StatusBadge status={config.status} />}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => setSetupProvider(p.value)}
-                >
-                  {isActive ? "Edit" : "Configure"}
-                </Button>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* API-key config dialog */}
+  // No provider configured yet, or user clicked "Switch provider"
+  if (!config || selecting) {
+    return (
+      <>
+        <AiProviderCards onSelectApiKey={(p) => setSetupProvider(p)} />
         <Dialog open={!!setupProvider} onOpenChange={(open) => !open && setSetupProvider(null)}>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -669,6 +545,7 @@ function AiSettings() {
                 existingConfig={config?.provider === setupProvider ? config : null}
                 onSaved={() => {
                   setSetupProvider(null);
+                  setSelecting(false);
                   queryClient.invalidateQueries({ queryKey: ["settings-ai"] });
                   queryClient.invalidateQueries({ queryKey: ["ai-status"] });
                 }}
@@ -676,6 +553,131 @@ function AiSettings() {
             )}
           </DialogContent>
         </Dialog>
+      </>
+    );
+  }
+
+  const providerLabel =
+    AI_PROVIDERS.find((p) => p.value === config.provider)?.label ?? config.provider;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">AI Integration</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Connect an AI provider to generate personalized emails for your campaigns.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-col gap-3 rounded-lg border p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-md bg-muted p-2 text-foreground">
+                <Server className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">{providerLabel}</p>
+                <p className="text-xs text-muted-foreground">API key</p>
+              </div>
+            </div>
+            {config.status ? <StatusBadge status={config.status} /> : null}
+          </div>
+
+          {config.status === "connected" && (
+            <div className="flex items-center gap-2 text-sm text-green-700">
+              <CheckCircle className="h-4 w-4 shrink-0" />
+              Connection verified
+              {config.testedAt && (
+                <span className="text-muted-foreground">
+                  — {new Date(config.testedAt).toLocaleString()}
+                </span>
+              )}
+            </div>
+          )}
+          {config.status === "failed" && (
+            <div className="flex items-center gap-2 text-sm text-red-600">
+              <XCircle className="h-4 w-4 shrink-0" />
+              Last test failed — check your credentials and try again.
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setSetupProvider(config.provider as AiApiProvider)}
+            >
+              Edit
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1"
+              onClick={() => setSelecting(true)}
+            >
+              Switch provider
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+
+      {/* Edit dialog */}
+      <Dialog open={!!setupProvider} onOpenChange={(open) => !open && setSetupProvider(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {setupProvider
+                ? (AI_PROVIDERS.find((p) => p.value === setupProvider)?.label ?? "AI Provider")
+                : "Configure AI Provider"}
+            </DialogTitle>
+            <DialogDescription>
+              Enter your API credentials to connect this provider.
+            </DialogDescription>
+          </DialogHeader>
+          {setupProvider && (
+            <AiApiKeyForm
+              provider={setupProvider}
+              existingConfig={config?.provider === setupProvider ? config : null}
+              onSaved={() => {
+                setSetupProvider(null);
+                queryClient.invalidateQueries({ queryKey: ["settings-ai"] });
+                queryClient.invalidateQueries({ queryKey: ["ai-status"] });
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+function AiProviderCards({
+  onSelectApiKey,
+}: {
+  onSelectApiKey: (p: AiApiProvider) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Choose an AI provider</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          No AI provider is configured yet. Select one to get started.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            description="Connect via OpenAI OAuth — no API key needed"
+          {AI_PROVIDERS.map((p) => (
+            <ProviderCard
+              key={p.value}
+              icon={<Server className="h-5 w-5" />}
+              title={p.label}
+              description="Connect with an API key"
+              onClick={() => onSelectApiKey(p.value)}
+            />
+          ))}
+        </div>
       </CardContent>
     </Card>
   );

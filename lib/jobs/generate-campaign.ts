@@ -64,11 +64,11 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
   });
 
   // Resolve AI config
-  const providerName = (campaign.aiProvider ?? null) as string | null;
+  const requestedProviderName = (campaign.aiProvider ?? null) as string | null;
   const aiConfig = await prisma.aiConfig.findFirst({
     where: {
       userId,
-      ...(providerName ? { provider: providerName as AiProviderName } : {}),
+      ...(requestedProviderName ? { provider: requestedProviderName as AiProviderName } : {}),
       status: "connected",
     },
     orderBy: { updatedAt: "desc" },
@@ -82,14 +82,18 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
     throw new Error("No connected AI config found");
   }
 
-  const provider = aiConfig.provider as AiProviderName;
-  const isCodex = provider === "codex";
+  const providerName = aiConfig.provider as string;
+  if (providerName === "codex") {
+    await prisma.campaign.update({ where: { id: campaignId }, data: { status: "failed" } });
+    throw new Error("Codex integration is no longer supported");
+  }
 
-  if (!isCodex && !aiConfig.encryptedApiKey) {
+  if (!aiConfig.encryptedApiKey) {
     await prisma.campaign.update({ where: { id: campaignId }, data: { status: "failed" } });
     throw new Error("AI config has no API key stored");
   }
-  const apiKey = !isCodex ? decrypt(aiConfig.encryptedApiKey!) : "";
+  const provider = providerName as AiProviderName;
+  const apiKey = decrypt(aiConfig.encryptedApiKey);
   const model = campaign.aiModel ?? aiConfig.model ?? DEFAULT_MODELS[provider] ?? "gpt-4o-mini";
   const baseUrl = aiConfig.baseUrl ?? PROVIDER_BASE_URLS[provider] ?? undefined;
 
@@ -133,7 +137,6 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
         baseUrl,
         systemPrompt,
         userPrompt,
-        userId: isCodex ? userId : undefined,
       });
 
       await prisma.campaignEmail.upsert({

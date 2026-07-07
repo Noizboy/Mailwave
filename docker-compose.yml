@@ -1,0 +1,139 @@
+# Mailwave — local Docker Compose orchestration.
+#
+# Boots the full stack with a single command:
+#   copy .env.docker.example .env   (then edit secrets)
+#   docker compose up -d --build
+#
+# Services: postgres, redis, migrate (one-shot), app, worker.
+# Network:  mailwave-net (shared).
+# Volumes:  pgdata, redisdata.
+#
+# Production override: docker-compose.prod.yml (see docs/docker.md).
+# Requires Docker Compose v2 (uses service_healthy / service_completed_successfully).
+
+name: mailwave
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mailwave}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-mailwave}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Dev-friendly: publish 5432 so host tooling (Prisma Studio, psql) can
+    # connect. The production override removes this binding.
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mailwave} -d ${POSTGRES_DB:-mailwave}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - mailwave-net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    # Dev-friendly: publish 6379. Removed in production override.
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+    networks:
+      - mailwave-net
+
+  migrate:
+    # One-shot migration container. Uses the worker image (full node_modules
+    # incl. prisma CLI + schema + generated client). Runs `prisma migrate
+    # deploy` when versioned migrations exist, otherwise falls back to
+    # `prisma db push` (no data loss). See follow-up DOCKER-011 for
+    # establishing versioned migrations.
+    build:
+      context: .
+      target: worker
+    restart: "no"
+    env_file:
+      - .env
+    # Clear the worker entrypoint and run the migration command directly.
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        if [ -d prisma/migrations ] && [ -n "$$(ls -A prisma/migrations 2>/dev/null)" ]; then
+          echo "[migrate] applying prisma migrate deploy";
+          npx prisma migrate deploy;
+        else
+          echo "[migrate] no versioned migrations found, running prisma db push";
+          npx prisma db push --accept-data-loss=false;
+        fi
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mailwave-net
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Internal hostnames so the entrypoint probe targets the right host.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - mailwave-net
+
+  worker:
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # Scale horizontally: docker compose up -d --scale worker=3
+    networks:
+      - mailwave-net
+
+networks:
+  mailwave-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:

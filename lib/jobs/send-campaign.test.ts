@@ -96,6 +96,7 @@ function approvedEmail(id: string, contactId: string, emailsSentCount = 0) {
 describe("processSend", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.AUTH_SECRET = "test-auth-secret-for-tracking-pixel-signing-32+";
     sendMail.mockResolvedValue({});
     mocked(prisma.campaign.findFirst).mockResolvedValue(baseCampaign as never);
     mocked(prisma.campaign.findUnique).mockResolvedValue({ ...baseCampaign, status: "sending", activeSendRunId: "run-1" } as never);
@@ -190,7 +191,7 @@ describe("processSend", () => {
     expect(prisma.deliveryEvent.create).toHaveBeenCalledTimes(2);
     expect(prisma.contact.update).toHaveBeenCalledWith({
       where: { id: "c1" },
-      data: { emailsSentCount: 1 },
+      data: { emailsSentCount: { increment: 1 } },
     });
     // sentCount is incremented per email in real-time so the progress bar can track it
     expect(prisma.campaign.update).toHaveBeenCalledWith(
@@ -281,7 +282,7 @@ describe("processSend", () => {
     expect(sendMail).toHaveBeenCalledTimes(1);
     expect(prisma.contact.update).toHaveBeenCalledWith({
       where: { id: "c1" },
-      data: { emailsSentCount: 3, status: "suppressed" },
+      data: { emailsSentCount: { increment: 1 }, status: "suppressed" },
     });
   });
 
@@ -297,7 +298,7 @@ describe("processSend", () => {
     expect(sendMail).toHaveBeenCalledTimes(1);
     expect(prisma.contact.update).toHaveBeenCalledWith({
       where: { id: "c1" },
-      data: { emailsSentCount: 2 },
+      data: { emailsSentCount: { increment: 1 } },
     });
   });
 

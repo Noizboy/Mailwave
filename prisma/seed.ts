@@ -3,13 +3,28 @@ import { PrismaClient } from "../app/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
+// Fail closed: never seed a production database. The demo user has a known
+// password and seeding production would leave a trivially-guessable account
+// in place (CN-003).
+if (process.env.NODE_ENV === "production") {
+  console.error("✗ Refusing to seed a production database (NODE_ENV=production).");
+  console.error("  Seed creates a demo user with a known password — dev/test only.");
+  process.exit(1);
+}
+
 async function main() {
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
   const prisma = new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0]);
 
   console.log("🌱 Seeding database with extended mockups...");
 
-  const passwordHash = await bcrypt.hash("password123", 12);
+  // Demo password: prefer an explicit env var so it isn't a hardcoded constant.
+  // Default kept for local dev convenience, but logged loudly.
+  const demoPassword = process.env.SEED_DEMO_PASSWORD ?? "password123";
+  if (!process.env.SEED_DEMO_PASSWORD) {
+    console.warn("⚠  SEED_DEMO_PASSWORD not set — using default 'password123' (dev/test only).");
+  }
+  const passwordHash = await bcrypt.hash(demoPassword, 12);
 
   const user = await prisma.user.upsert({
     where: { email: "demo@mailwave.app" },
@@ -26,7 +41,7 @@ async function main() {
     },
   });
 
-  console.log(`✅ Demo user: ${user.email} / password123`);
+  console.log(`✅ Demo user: ${user.email} / ${demoPassword}`);
 
   // Seed extended contacts (30 contacts)
   const contactsData = [

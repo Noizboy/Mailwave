@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
+import { assertSafeHost } from "@/lib/ssrf";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -12,19 +13,20 @@ export async function GET() {
 
   const config = await prisma.aiConfig.findUnique({ where: { userId: session.user.id } });
   if (!config) return NextResponse.json(null);
+  if (config.provider === "codex") return NextResponse.json(null);
 
   return NextResponse.json({
     ...config,
     encryptedApiKey: config.encryptedApiKey ? "••••••••" : null,
     oauthAccessToken: undefined,
     oauthRefreshToken: undefined,
-    oauthConnected: config.oauthConnected,
-    oauthExpiresAt: config.oauthExpiresAt?.toISOString() ?? null,
+    oauthConnected: undefined,
+    oauthExpiresAt: undefined,
   });
 }
 
 const aiSchema = z.object({
-  provider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom", "codex"]),
+  provider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom"]),
   model: z.string().min(1),
   apiKey: z.string().optional(),
   baseUrl: z.string().url().optional().or(z.literal("")),
@@ -42,6 +44,14 @@ export async function PUT(req: NextRequest) {
 
   const { apiKey, baseUrl, ...rest } = parsed.data;
 
+  // SSRF check on a user-supplied base URL before persisting (CN-005).
+  if (baseUrl) {
+    const hostCheck = await assertSafeHost(baseUrl);
+    if (!hostCheck.ok) {
+      return NextResponse.json({ error: hostCheck.reason ?? "Invalid AI base URL." }, { status: 400 });
+    }
+  }
+
   const existing = await prisma.aiConfig.findUnique({ where: { userId: session.user.id } });
   const encryptedApiKey = apiKey ? encrypt(apiKey) : existing?.encryptedApiKey ?? null;
 
@@ -55,12 +65,20 @@ export async function PUT(req: NextRequest) {
       ...rest,
       encryptedApiKey,
       baseUrl: baseUrl || null,
+      oauthAccessToken: null,
+      oauthRefreshToken: null,
+      oauthExpiresAt: null,
+      oauthConnected: false,
       status: "disconnected",
     },
     update: {
       ...rest,
       encryptedApiKey,
       baseUrl: baseUrl || null,
+      oauthAccessToken: null,
+      oauthRefreshToken: null,
+      oauthExpiresAt: null,
+      oauthConnected: false,
       status: updateStatus,
     },
   });

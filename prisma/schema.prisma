@@ -57,9 +57,9 @@ model AiConfig {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   oauthAccessToken  String?
-  oauthRefreshToken String?
-  oauthExpiresAt    DateTime?
   oauthConnected    Boolean            @default(false)
+  oauthExpiresAt    DateTime?
+  oauthRefreshToken String?
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -148,40 +148,40 @@ model ListMember {
 }
 
 model Campaign {
-  id                String          @id @default(cuid())
-  userId            String
-  name              String
-  listId            String
-  goal              String?
-  product           String?
-  cta               String?
-  tone              String?
-  language          String          @default("en")
-  emailLength       String          @default("medium")
-  systemPrompt      String?
-  intervalType      IntervalType    @default(random)
-  minInterval       Int             @default(3)
-  maxInterval       Int             @default(8)
-  dailyLimit        Int             @default(100)
-  hourlyLimit       Int             @default(20)
-  scheduledAt       DateTime?
-  aiProvider        AiProvider?
-  aiModel           String?
-  status            CampaignStatus  @default(pending)
-  totalEmails       Int             @default(0)
-  sentCount         Int             @default(0)
-  failedCount       Int             @default(0)
-  pendingCount      Int             @default(0)
-  skippedCount      Int             @default(0)
-  activeSendRunId   String?
-  startedAt         DateTime?
-  nextSendAt        DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  list              List            @relation(fields: [listId], references: [id])
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  emails            CampaignEmail[]
+  id              String          @id @default(cuid())
+  userId          String
+  name            String
+  listId          String
+  goal            String?
+  product         String?
+  cta             String?
+  tone            String?
+  language        String          @default("en")
+  emailLength     String          @default("medium")
+  intervalType    IntervalType    @default(random)
+  minInterval     Int             @default(3)
+  maxInterval     Int             @default(8)
+  dailyLimit      Int             @default(100)
+  hourlyLimit     Int             @default(20)
+  scheduledAt     DateTime?
+  aiProvider      AiProvider?
+  aiModel         String?
+  status          CampaignStatus  @default(pending)
+  totalEmails     Int             @default(0)
+  sentCount       Int             @default(0)
+  failedCount     Int             @default(0)
+  pendingCount    Int             @default(0)
+  skippedCount    Int             @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  systemPrompt    String?
+  nextSendAt      DateTime?
+  activeSendRunId String?
+  list            List            @relation(fields: [listId], references: [id])
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails          CampaignEmail[]
 }
 
 model CampaignEmail {

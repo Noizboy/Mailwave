@@ -1,0 +1,96 @@
+name: Docker
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build images & validate compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build app image (runner target)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runner
+          tags: mailwave:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: worker
+          tags: mailwave-worker:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Validate base compose config
+        run: |
+          cp .env.docker.example .env
+          docker compose config > /dev/null
+
+      - name: Validate production compose override
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config > /dev/null
+
+      - name: Verify tsx is present in the worker image
+        run: docker run --rm mailwave-worker:ci npx tsx --version
+
+  smoke:
+    name: Compose smoke test (main only)
+    # Run the full `up` smoke test only on main to keep PR CI fast.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build images
+        run: |
+          docker build -t mailwave:ci --target runner .
+          docker build -t mailwave-worker:ci --target worker .
+
+      - name: Boot stack
+        run: |
+          cp .env.docker.example .env
+          docker compose up -d --build
+          # Wait for app health (up to ~60s).
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3001/api/health >/dev/null 2>&1; then
+              echo "app is healthy"
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://localhost:3001/api/health
+          echo
+
+      - name: Worker started
+        run: docker compose logs worker | grep -E "MailWave worker started"
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
