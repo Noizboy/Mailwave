@@ -46,12 +46,24 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const queue = getSendQueue();
+  const jobId = `send-${campaign.id}`;
+
+  // Remove any completed/failed job with the same ID so BullMQ doesn't deduplicate
+  // a fresh send against a prior run that is still within the retention window.
+  const existingJob = await queue.getJob(jobId);
+  if (existingJob) {
+    const state = await existingJob.getState();
+    if (state === "completed" || state === "failed") {
+      await existingJob.remove();
+    }
+  }
+
   const job = await queue.add(
     "send",
     { campaignId: campaign.id, userId: session.user.id },
     {
       attempts: 1,
-      jobId: `send-${campaign.id}`,
+      jobId,
       removeOnComplete: { age: 3600 },
       removeOnFail: { age: 86400 },
     }

@@ -161,6 +161,11 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       });
 
       sentCount++;
+
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { sentCount: { increment: 1 } },
+      });
     } catch (err) {
       await prisma.campaignEmail.update({
         where: { id: email.id },
@@ -224,7 +229,6 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     where: { id: campaignId },
     data: {
       status: finalStatus,
-      sentCount: { increment: sentCount },
       failedCount: { increment: failCount },
       ...(finalStatus === "completed" ? { completedAt: new Date() } : {}),
     },

@@ -52,6 +52,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { campaignId: campaign.id },
       data: { status: "pending", errorReason: null },
     });
+    // Reset send counters so the progress bar starts fresh
+    await prisma.campaign.update({
+      where: { id: campaign.id },
+      data: { sentCount: 0, failedCount: 0, skippedCount: 0 },
+    });
   }
 
   // Set generating before queuing so the UI sees it immediately on the next poll

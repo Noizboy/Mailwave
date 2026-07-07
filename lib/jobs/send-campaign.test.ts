@@ -160,11 +160,15 @@ describe("processSend", () => {
       where: { id: "c1" },
       data: { emailsSentCount: 1 },
     });
+    // sentCount is incremented per email in real-time so the progress bar can track it
+    expect(prisma.campaign.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { sentCount: { increment: 1 } } })
+    );
+    // final update carries status/failedCount but NOT sentCount (already persisted above)
     expect(prisma.campaign.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           status: "completed",
-          sentCount: { increment: 2 },
           completedAt: expect.any(Date),
         }),
       })

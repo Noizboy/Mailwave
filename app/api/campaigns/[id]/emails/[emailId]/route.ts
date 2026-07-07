@@ -33,8 +33,13 @@ export async function PATCH(
 
   const emailExists = await prisma.campaignEmail.findFirst({
     where: { id: emailId, campaignId: id },
+    include: { contact: { select: { status: true } } },
   });
   if (!emailExists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (emailExists.contact.status === "suppressed") {
+    return NextResponse.json({ error: "Contact is suppressed" }, { status: 403 });
+  }
 
   await prisma.campaignEmail.update({
     where: { id: emailId },

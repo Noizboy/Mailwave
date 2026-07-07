@@ -20,8 +20,14 @@ import {
   Clock,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Send,
   Eye,
+  Mail,
+  AlertTriangle,
+  FileText,
+  Sparkles,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +45,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -57,6 +64,7 @@ interface ContactSnippet {
   lastName: string | null;
   company: string | null;
   jobTitle: string | null;
+  status: string | null;
 }
 
 interface EmailRow {
@@ -104,11 +112,56 @@ interface CampaignDetail {
   emails: CampaignEmail[];
 }
 
-const DOT_COLOR: Record<string, string> = {
-  approved: "bg-emerald-500",
-  pending: "bg-amber-400",
-  rejected: "bg-destructive",
-  skipped: "bg-muted-foreground",
+const AVATAR_COLORS = [
+  "bg-blue-600",
+  "bg-emerald-600",
+  "bg-orange-500",
+  "bg-violet-600",
+  "bg-teal-600",
+  "bg-rose-500",
+  "bg-amber-600",
+  "bg-cyan-600",
+  "bg-indigo-600",
+  "bg-pink-600",
+];
+
+function getAvatarColor(name: string): string {
+  const hash = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+function getContactInitials(contact: ContactSnippet): string {
+  if (contact.firstName && contact.lastName) {
+    return (contact.firstName[0] + contact.lastName[0]).toUpperCase();
+  }
+  if (contact.firstName) return contact.firstName.slice(0, 2).toUpperCase();
+  return contact.email.slice(0, 2).toUpperCase();
+}
+
+function getContactName(contact: ContactSnippet): string {
+  return (
+    [contact.firstName, contact.lastName].filter(Boolean).join(" ") ||
+    contact.email
+  );
+}
+
+const EMAIL_DOT: Record<string, { bg: string; icon: React.ReactNode }> = {
+  approved: {
+    bg: "bg-blue-500",
+    icon: <CheckCircle className="h-3 w-3 text-white" />,
+  },
+  pending: {
+    bg: "bg-amber-400",
+    icon: <Clock className="h-3 w-3 text-white" />,
+  },
+  rejected: {
+    bg: "bg-destructive",
+    icon: <XCircle className="h-3 w-3 text-white" />,
+  },
+  skipped: {
+    bg: "bg-muted-foreground",
+    icon: <MinusCircle className="h-3 w-3 text-white" />,
+  },
 };
 
 const TONE_LABELS: Record<string, string> = {
@@ -166,21 +219,21 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
-  // Email review state
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [regeneratingSubject, setRegeneratingSubject] = useState(false);
   const [sidebarFilter, setSidebarFilter] = useState<string>("all");
 
-  // Collapsible state for detail cards
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [sendingOpen, setSendingOpen] = useState(false);
 
-  // Campaign Details edit state
   const [editDetailsOpen, setEditDetailsOpen] = useState(false);
   const [detailsName, setDetailsName] = useState("");
   const [detailsGoal, setDetailsGoal] = useState("");
@@ -188,7 +241,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const [detailsCta, setDetailsCta] = useState("");
   const [savingDetails, setSavingDetails] = useState(false);
 
-  // AI Instructions edit state
   const [editAiOpen, setEditAiOpen] = useState(false);
   const [aiTone, setAiTone] = useState("");
   const [aiLanguage, setAiLanguage] = useState("");
@@ -196,7 +248,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const [aiSystemPrompt, setAiSystemPrompt] = useState("");
   const [savingAi, setSavingAi] = useState(false);
 
-  // Sending Configuration edit state
   const [editSendingOpen, setEditSendingOpen] = useState(false);
   const [sendingIntervalType, setSendingIntervalType] = useState<"fixed" | "random">("random");
   const [sendingMinInterval, setSendingMinInterval] = useState(3);
@@ -217,7 +268,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     queryKey: ["campaign-emails", campaignId],
     queryFn: () => fetchEmails(campaignId),
     enabled: !!campaign,
-    refetchInterval: campaign?.status === "generating" ? 3000 : false,
+    refetchInterval: (campaign?.status === "generating" || campaign?.status === "sending") ? 3000 : false,
   });
 
   const emails = emailsData?.emails ?? [];
@@ -332,16 +383,41 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     setRegenerating(true);
     const res = await fetch(
       `/api/campaigns/${campaignId}/emails/${selected.id}/regenerate`,
-      { method: "POST" }
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "body" }),
+      }
     );
     if (res.ok) {
-      toast.success("Email regenerated", "A new version has been created using AI.");
+      toast.success("Email regenerated", "A new body has been created using AI.");
       invalidate();
     } else {
       const err = await res.json();
       toast.error("Regeneration failed", err.error ?? "Check your AI settings and try again.");
     }
     setRegenerating(false);
+  };
+
+  const handleRegenerateSubject = async () => {
+    if (!selected) return;
+    setRegeneratingSubject(true);
+    const res = await fetch(
+      `/api/campaigns/${campaignId}/emails/${selected.id}/regenerate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "subject" }),
+      }
+    );
+    if (res.ok) {
+      toast.success("Subject regenerated", "A new subject line has been created using AI.");
+      invalidate();
+    } else {
+      const err = await res.json();
+      toast.error("Regeneration failed", err.error ?? "Check your AI settings and try again.");
+    }
+    setRegeneratingSubject(false);
   };
 
   const openEdit = () => {
@@ -522,6 +598,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const canPause = campaign.status === "sending";
   const isGenerating = campaign.status === "generating";
   const hasFailures = campaign.failedCount > 0 && ["sending", "paused", "completed"].includes(campaign.status);
+  const isSending = ["sending", "paused"].includes(campaign.status);
 
   const FILTER_TABS = [
     { key: "all", label: `All (${emails.length})` },
@@ -546,87 +623,145 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
 
   const nextEmailLabel = getNextEmailLabel(campaign);
 
-  const stats: Array<{ label: string; value: number; tone: "neutral" | "success" | "destructive" | "warning" }> = [
-    { label: "Total Emails", value: campaign.totalEmails, tone: "neutral" },
-    { label: "Sent", value: campaign.sentCount, tone: "success" },
-    { label: "Failed", value: campaign.failedCount, tone: "destructive" },
-    { label: "Pending", value: pendingCount, tone: "warning" },
-    { label: "Skipped", value: campaign.skippedCount, tone: "neutral" },
+  const stats: Array<{
+    label: string;
+    value: number;
+    tone: "neutral" | "success" | "destructive" | "warning";
+    icon: React.ReactNode;
+    iconBg: string;
+  }> = [
+    {
+      label: "Total Emails",
+      value: campaign.totalEmails,
+      tone: "neutral",
+      icon: <Mail className="h-5 w-5 text-blue-600" />,
+      iconBg: "bg-blue-100",
+    },
+    {
+      label: "Sent",
+      value: campaign.sentCount,
+      tone: "success",
+      icon: <Send className="h-5 w-5 text-emerald-600" />,
+      iconBg: "bg-emerald-100",
+    },
+    {
+      label: "Failed",
+      value: campaign.failedCount,
+      tone: "destructive",
+      icon: <AlertTriangle className="h-5 w-5 text-red-500" />,
+      iconBg: "bg-red-100",
+    },
+    {
+      label: "Pending",
+      value: pendingCount,
+      tone: "warning",
+      icon: <Clock className="h-5 w-5 text-amber-500" />,
+      iconBg: "bg-amber-100",
+    },
+    {
+      label: "Skipped",
+      value: campaign.skippedCount,
+      tone: "neutral",
+      icon: <MinusCircle className="h-5 w-5 text-muted-foreground" />,
+      iconBg: "bg-muted",
+    },
   ];
 
   return (
     <div className="flex flex-col h-full">
       <TopBar title={campaign.name} />
       <main className="flex-1 overflow-y-auto p-6">
-        <div className="space-y-6">
+        <div className="space-y-5">
 
-          {/* Campaign action bar */}
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={campaign.status} />
-            <div className="flex-1" />
-            {isGenerating ? (
-              <Button size="sm" disabled variant="outline">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Generating...
-              </Button>
-            ) : (
-              <>
-                {canGenerate && (
-                  <Button size="sm" onClick={() => handleGenerate()}>
-                    <Play className="h-4 w-4" />
-                    {campaign.status === "completed" ? "Re-Generate Emails" : "Generate Emails"}
+          {/* Page header — breadcrumb + title + actions */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">
+              <Link href="/campaigns" className="hover:text-foreground transition-colors">
+                Campaigns
+              </Link>
+            </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                  {campaign.name}
+                </h1>
+                <div className="mt-2">
+                  <StatusBadge status={campaign.status} />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {isGenerating ? (
+                  <Button size="sm" disabled variant="outline">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Generating...
                   </Button>
+                ) : (
+                  <>
+                    {canGenerate && (
+                      <Button size="sm" onClick={() => handleGenerate()}>
+                        <Play className="h-4 w-4" />
+                        {campaign.status === "completed" ? "Re-Generate Emails" : "Generate Emails"}
+                      </Button>
+                    )}
+                    {canRetryGeneration && (
+                      <Button size="sm" onClick={() => handleGenerate("retry_failed")} variant="outline">
+                        <RotateCcw className="h-4 w-4" />
+                        Retry Failed
+                      </Button>
+                    )}
+                    {canRegenerate && (
+                      <Button size="sm" onClick={() => handleGenerate()} variant="outline">
+                        <RefreshCw className="h-4 w-4" />
+                        Re-Generate Emails
+                      </Button>
+                    )}
+                    {canApprove && (
+                      <Button size="sm" onClick={handleApproveAll}>
+                        <CheckCheck className="h-4 w-4" />
+                        Approve All
+                      </Button>
+                    )}
+                    {canSend && (
+                      <Button size="sm" onClick={handleSend}>
+                        <Play className="h-4 w-4" />
+                        {campaign.status === "paused" ? "Resume Sending" : "Send Campaign"}
+                      </Button>
+                    )}
+                    {canPause && (
+                      <Button size="sm" onClick={handlePause} variant="outline">
+                        <Pause className="h-4 w-4" />
+                        Pause
+                      </Button>
+                    )}
+                    {hasFailures && (
+                      <Button size="sm" onClick={handleRetryFailed} variant="outline">
+                        <RotateCcw className="h-4 w-4" />
+                        Retry Failed
+                      </Button>
+                    )}
+                    {hasFailures && (
+                      <Button size="sm" onClick={handleCancel} variant="destructive">
+                        <XCircle className="h-4 w-4" />
+                        Cancel
+                      </Button>
+                    )}
+                  </>
                 )}
-                {canRetryGeneration && (
-                  <Button size="sm" onClick={() => handleGenerate("retry_failed")} variant="outline">
-                    <RotateCcw className="h-4 w-4" />
-                    Retry Failed
-                  </Button>
-                )}
-                {canRegenerate && (
-                  <Button size="sm" onClick={() => handleGenerate()} variant="outline">
-                    <RefreshCw className="h-4 w-4" />
-                    Re-Generate Emails
-                  </Button>
-                )}
-                {canApprove && (
-                  <Button size="sm" onClick={handleApproveAll} variant="outline">
-                    <CheckCheck className="h-4 w-4" />
-                    Approve All
-                  </Button>
-                )}
-                {canSend && (
-                  <Button size="sm" onClick={handleSend}>
-                    <Play className="h-4 w-4" />
-                    {campaign.status === "paused" ? "Resume Sending" : "Send Campaign"}
-                  </Button>
-                )}
-                {canPause && (
-                  <Button size="sm" onClick={handlePause} variant="outline">
-                    <Pause className="h-4 w-4" />
-                    Pause
-                  </Button>
-                )}
-                {hasFailures && (
-                  <Button size="sm" onClick={handleRetryFailed} variant="outline">
-                    <RotateCcw className="h-4 w-4" />
-                    Retry Failed
-                  </Button>
-                )}
-                {hasFailures && (
-                  <Button size="sm" onClick={handleCancel} variant="destructive">
-                    <XCircle className="h-4 w-4" />
-                    Cancel
-                  </Button>
-                )}
-              </>
-            )}
+              </div>
+            </div>
           </div>
 
           {/* Stats grid */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
             {stats.map((s) => (
-              <StatChip key={s.label} label={s.label} value={s.value} tone={s.tone} />
+              <StatChip
+                key={s.label}
+                label={s.label}
+                value={s.value}
+                tone={s.tone}
+                icon={s.icon}
+                iconBg={s.iconBg}
+              />
             ))}
           </div>
 
@@ -642,7 +777,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                   {generatedCount} / {campaign.totalEmails} generated
                 </span>
               </div>
-              <Progress value={generationPercent} className="h-3" />
+              <Progress value={generationPercent} className="h-2" />
               <p className="text-xs text-muted-foreground">
                 AI is personalizing each email. This page refreshes automatically every few seconds.
               </p>
@@ -651,14 +786,14 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
 
           {/* Sending progress bar */}
           {!isGenerating && campaign.totalEmails > 0 && (
-            <div className="rounded-xl border bg-card px-5 py-4 space-y-3">
+            <div className="space-y-2 px-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-foreground">Sending progress</span>
+                <span className="text-sm font-medium text-foreground">Sending progress</span>
                 <span className="text-sm text-muted-foreground">
                   {percent}%{nextEmailLabel ? ` · next email in ${nextEmailLabel}` : ""}
                 </span>
               </div>
-              <Progress value={percent} className="h-3" />
+              <Progress value={percent} className="h-2" />
             </div>
           )}
 
@@ -671,13 +806,16 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
               onKeyDown={(e) => e.key === "Enter" && setDetailsOpen((v) => !v)}
               className="flex w-full cursor-pointer items-center justify-between px-5 py-4 select-none"
             >
-              <span className="text-sm font-semibold text-foreground">Campaign Details</span>
+              <div className="flex items-center gap-2.5">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-foreground">Campaign Details</span>
+              </div>
               <div className="flex items-center gap-2">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={openEditDetails}
-                  className="h-7 text-xs"
+                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
                 >
                   <Pencil className="h-3 w-3" />
                   Edit
@@ -690,7 +828,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
               </div>
             </div>
             {detailsOpen && (
-              <div className="border-t px-5 py-4 space-y-4">
+              <div className="border-t px-5 py-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 md:grid-cols-3">
                 <InfoField label="LIST">
                   <Link href={`/lists/${campaign.list.id}`} className="text-primary hover:underline">
                     {campaign.list.name}
@@ -720,13 +858,16 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
               onKeyDown={(e) => e.key === "Enter" && setAiOpen((v) => !v)}
               className="flex w-full cursor-pointer items-center justify-between px-5 py-4 select-none"
             >
-              <span className="text-sm font-semibold text-foreground">AI Instructions</span>
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-foreground">AI Instructions</span>
+              </div>
               <div className="flex items-center gap-2">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={openEditAi}
-                  className="h-7 text-xs"
+                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
                 >
                   <Pencil className="h-3 w-3" />
                   Edit
@@ -739,7 +880,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
               </div>
             </div>
             {aiOpen && (
-              <div className="border-t px-5 py-4 space-y-4">
+              <div className="border-t px-5 py-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 md:grid-cols-3">
                 <InfoField label="TONE">
                   {TONE_LABELS[campaign.tone ?? ""] ?? campaign.tone ?? "Professional"}
                 </InfoField>
@@ -756,11 +897,13 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                   <InfoField label="MODEL">{campaign.aiModel}</InfoField>
                 )}
                 {campaign.systemPrompt && (
-                  <InfoField label="SYSTEM PROMPT">
-                    <div className="max-h-36 overflow-y-auto rounded-md border bg-muted/40 p-2 text-xs leading-relaxed text-foreground/80">
-                      <p className="whitespace-pre-wrap">{campaign.systemPrompt}</p>
-                    </div>
-                  </InfoField>
+                  <div className="col-span-1 sm:col-span-2 md:col-span-3">
+                    <InfoField label="SYSTEM PROMPT">
+                      <div className="max-h-36 overflow-y-auto rounded-md border bg-muted/40 p-2 text-xs leading-relaxed text-foreground/80">
+                        <p className="whitespace-pre-wrap">{campaign.systemPrompt}</p>
+                      </div>
+                    </InfoField>
+                  </div>
                 )}
               </div>
             )}
@@ -775,13 +918,16 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
               onKeyDown={(e) => e.key === "Enter" && setSendingOpen((v) => !v)}
               className="flex w-full cursor-pointer items-center justify-between px-5 py-4 select-none"
             >
-              <span className="text-sm font-semibold text-foreground">Sending Configuration</span>
+              <div className="flex items-center gap-2.5">
+                <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-foreground">Sending Configuration</span>
+              </div>
               <div className="flex items-center gap-2">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={openEditSending}
-                  className="h-7 text-xs"
+                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
                 >
                   <Pencil className="h-3 w-3" />
                   Edit
@@ -794,37 +940,39 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
               </div>
             </div>
             {sendingOpen && (
-              <div className="border-t px-5 py-4 space-y-4">
-                <InfoField label="INTERVAL TYPE">
-                  {campaign.intervalType === "fixed" ? "Fixed" : "Random"}
-                </InfoField>
+              <div className="border-t px-5 py-4">
                 {campaign.intervalType === "fixed" ? (
-                  <InfoField label="INTERVAL">{campaign.minInterval} min</InfoField>
+                  <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                    <InfoField label="INTERVAL TYPE">Fixed</InfoField>
+                    <InfoField label="INTERVAL">{campaign.minInterval} min</InfoField>
+                  </div>
                 ) : (
-                  <>
+                  <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-3">
+                    <InfoField label="INTERVAL TYPE">Random</InfoField>
                     <InfoField label="MIN INTERVAL">{campaign.minInterval} min</InfoField>
                     <InfoField label="MAX INTERVAL">{campaign.maxInterval} min</InfoField>
-                  </>
+                  </div>
                 )}
               </div>
             )}
           </div>
 
           {/* Generated Emails — split review view */}
-          <Card className="overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between border-b pb-3">
-              <CardTitle>Generated Emails</CardTitle>
-              <div className="flex items-center gap-3">
-                {emails.length > 0 && (
-                  <span className="text-sm text-muted-foreground">
-                    {approvedCount}/{emails.length} approved
-                  </span>
-                )}
-              </div>
-            </CardHeader>
-            <div className="flex h-[650px] overflow-hidden">
+          <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <span className="text-base font-semibold text-foreground">Generated Emails</span>
+              {emails.length > 0 && (
+                <span className="text-sm text-muted-foreground">
+                  {approvedCount}/{emails.length} approved
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col lg:flex-row lg:h-[650px] lg:overflow-hidden">
               {/* Left sidebar — contact list */}
-              <aside className="flex w-80 shrink-0 flex-col border-r bg-background">
+              <aside className={cn(
+                "flex flex-col border-b lg:border-b-0 lg:border-r bg-background lg:w-80 lg:shrink-0",
+                mobileView === "detail" ? "hidden lg:flex" : "flex"
+              )}>
                 <div className="overflow-x-auto border-b">
                   <Tabs value={sidebarFilter} onValueChange={setSidebarFilter} className="px-2 pt-2">
                     <TabsList>
@@ -836,11 +984,11 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                     </TabsList>
                   </Tabs>
                 </div>
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto max-h-72 lg:max-h-none">
                   {emailsLoading ? (
                     <div className="space-y-2 p-4">
                       {Array.from({ length: 5 }).map((_, i) => (
-                        <Skeleton key={i} className="h-10 w-full" />
+                        <Skeleton key={i} className="h-14 w-full" />
                       ))}
                     </div>
                   ) : filteredEmails.length === 0 ? (
@@ -854,44 +1002,50 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                   ) : (
                     filteredEmails.map((email) => {
                       const isSelected = (selectedId ?? filteredEmails[0]?.id) === email.id;
-                      const name =
-                        [email.contact.firstName, email.contact.lastName]
-                          .filter(Boolean)
-                          .join(" ") || email.contact.email;
+                      const name = getContactName(email.contact);
+                      const initials = getContactInitials(email.contact);
+                      const avatarColor = getAvatarColor(name);
+
+                      let approvalLabel = email.approvalStatus.toUpperCase();
+                      let approvalBg = "bg-amber-100 text-amber-700";
+                      if (email.status === "sent") {
+                        approvalLabel = "SENT";
+                        approvalBg = "bg-sky-100 text-sky-700";
+                        if (email.opened) {
+                          approvalLabel = "OPENED";
+                          approvalBg = "bg-emerald-100 text-emerald-700";
+                        }
+                      } else if (email.contact.status === "suppressed") {
+                        approvalLabel = "SUPPRESSED";
+                        approvalBg = "bg-destructive/10 text-destructive";
+                      } else if (email.approvalStatus === "approved") {
+                        approvalBg = "bg-blue-100 text-blue-700";
+                      } else if (email.approvalStatus === "rejected") {
+                        approvalBg = "bg-destructive/10 text-destructive";
+                      } else if (email.approvalStatus === "skipped") {
+                        approvalBg = "bg-muted text-muted-foreground";
+                      }
+
                       return (
                         <button
                           key={email.id}
                           onClick={() => {
                             setSelectedId(email.id);
                             setEditMode(false);
+                            setMobileView("detail");
                           }}
                           className={cn(
                             "flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors",
                             isSelected ? "bg-accent" : "hover:bg-muted/40"
                           )}
                         >
-                          <span
-                            className={cn(
-                              "h-2.5 w-2.5 shrink-0 rounded-full",
-                              DOT_COLOR[email.approvalStatus] ?? "bg-muted-foreground"
-                            )}
-                          />
+                          <Avatar className={cn("h-9 w-9 shrink-0 text-white text-xs font-semibold", avatarColor)}>
+                            <AvatarFallback className={cn("text-white text-xs font-semibold", avatarColor)}>
+                              {initials}
+                            </AvatarFallback>
+                          </Avatar>
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate text-sm font-medium text-foreground">{name}</span>
-                              {email.status === "sent" && (
-                                <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
-                                  <Send className="h-2.5 w-2.5" />
-                                  Sent
-                                </span>
-                              )}
-                              {email.status === "sent" && email.opened && (
-                                <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
-                                  <Eye className="h-2.5 w-2.5" />
-                                  Opened
-                                </span>
-                              )}
-                            </div>
+                            <div className="truncate text-sm font-medium text-foreground">{name}</div>
                             {(email.contact.firstName || email.contact.lastName) && (
                               <div className="truncate text-xs text-muted-foreground">
                                 {email.contact.email}
@@ -903,6 +1057,9 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                               </div>
                             )}
                           </div>
+                          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", approvalBg)}>
+                            {approvalLabel}
+                          </span>
                         </button>
                       );
                     })
@@ -911,7 +1068,18 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
               </aside>
 
               {/* Right panel */}
-              <main className="flex-1 overflow-y-auto bg-muted/30">
+              <main className={cn(
+                "flex-1 overflow-y-auto bg-muted/30",
+                mobileView === "list" ? "hidden lg:block" : "block"
+              )}>
+                {/* Back button — below lg breakpoint only */}
+                <button
+                  onClick={() => setMobileView("list")}
+                  className="lg:hidden flex items-center gap-1.5 px-4 pt-4 pb-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  All contacts
+                </button>
                 {!selected ? (
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                     {emails.length === 0
@@ -922,39 +1090,56 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                   </div>
                 ) : (
                   <div className="space-y-4 p-6">
-                    {/* Contact info — clickable link */}
-                    <Card className="flex items-start justify-between p-4">
+                    {/* Contact header card */}
+                    <div className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3">
+                      {(() => {
+                        const name = getContactName(selected.contact);
+                        const initials = getContactInitials(selected.contact);
+                        const avatarColor = getAvatarColor(name);
+                        return (
+                          <Avatar className={cn("h-10 w-10 shrink-0", avatarColor)}>
+                            <AvatarFallback className={cn("text-white text-sm font-semibold", avatarColor)}>
+                              {initials}
+                            </AvatarFallback>
+                          </Avatar>
+                        );
+                      })()}
                       <Link
                         href={`/contacts?q=${encodeURIComponent(selected.contact.email)}`}
-                        className="group min-w-0"
+                        className="group min-w-0 flex-1"
                       >
                         <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                          {[selected.contact.firstName, selected.contact.lastName]
-                            .filter(Boolean)
-                            .join(" ") || selected.contact.email}
+                          {getContactName(selected.contact)}
                         </div>
-                        {(selected.contact.firstName || selected.contact.lastName) && (
-                          <div className="text-xs text-muted-foreground">{selected.contact.email}</div>
-                        )}
-                        {selected.contact.company && (
-                          <div className="text-xs text-muted-foreground">
-                            {selected.contact.jobTitle ? `${selected.contact.jobTitle} · ` : ""}
-                            {selected.contact.company}
-                          </div>
-                        )}
+                        <div className="text-xs text-muted-foreground truncate">
+                          {selected.contact.email}
+                          {selected.contact.company && (
+                            <> · {selected.contact.company}</>
+                          )}
+                        </div>
                       </Link>
-                      <StatusBadge status={selected.approvalStatus} />
-                    </Card>
+                      <StatusBadge
+                        status={
+                          selected.contact.status === "suppressed"
+                            ? "rejected"
+                            : selected.approvalStatus
+                        }
+                      />
+                    </div>
 
+                    {/* AI notes */}
                     {selected.personalizationNotes && !editMode && (
-                      <div className="rounded-lg bg-blue-50 px-4 py-2.5 text-xs text-blue-700">
-                        <strong>AI notes:</strong> {selected.personalizationNotes}
+                      <div className="rounded-lg bg-blue-50 px-4 py-3 text-xs text-blue-700 flex gap-2">
+                        <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500" />
+                        <div>
+                          <strong>AI notes:</strong> {selected.personalizationNotes}
+                        </div>
                       </div>
                     )}
 
                     {/* Preview / edit */}
-                    {editMode ? (
-                      <Card className="space-y-4 p-4">
+                    {editMode && !isSending ? (
+                      <div className="rounded-xl border bg-card space-y-4 p-4">
                         <div className="space-y-1.5">
                           <Label>Subject</Label>
                           <Input
@@ -984,11 +1169,11 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                             Cancel
                           </Button>
                         </div>
-                      </Card>
+                      </div>
                     ) : (
-                      <Card className="space-y-3 p-4">
-                        <div className="flex items-center gap-2">
-                          <span className="w-16 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="rounded-xl border bg-card space-y-3 p-4">
+                        <div className="flex items-start gap-2">
+                          <span className="mt-0.5 w-16 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             Subject
                           </span>
                           <p className="text-sm font-semibold text-foreground">
@@ -1003,11 +1188,17 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                             {selected.body ?? <em className="text-muted-foreground">No body</em>}
                           </p>
                         </div>
-                      </Card>
+                      </div>
+                    )}
+
+                    {selected.contact.status === "suppressed" && (
+                      <div className="rounded-lg bg-destructive/10 px-4 py-2.5 text-xs text-destructive">
+                        This contact is suppressed. Its email status cannot be changed.
+                      </div>
                     )}
 
                     {/* Actions */}
-                    {!editMode && (
+                    {!editMode && selected.contact.status !== "suppressed" && !isSending && (
                       <div className="flex flex-wrap gap-2">
                         <Button variant="outline" size="sm" onClick={openEdit}>
                           <Edit3 className="h-4 w-4" />
@@ -1016,8 +1207,17 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={handleRegenerateSubject}
+                          disabled={regeneratingSubject || regenerating}
+                        >
+                          <RefreshCw className={cn("h-4 w-4", regeneratingSubject && "animate-spin")} />
+                          {regeneratingSubject ? "Regenerating..." : "Regenerate Subject"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={handleRegenerate}
-                          disabled={regenerating}
+                          disabled={regenerating || regeneratingSubject}
                         >
                           <RefreshCw className={cn("h-4 w-4", regenerating && "animate-spin")} />
                           {regenerating ? "Regenerating..." : "Regenerate Email"}
@@ -1031,16 +1231,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                           >
                             <MinusCircle className="h-4 w-4" />
                             Skip Contact
-                          </Button>
-                        )}
-                        {selected.approvalStatus !== "rejected" && (
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => handleApproval(selected.id, "rejected")}
-                          >
-                            <XCircle className="h-4 w-4" />
-                            Reject
                           </Button>
                         )}
                         {selected.approvalStatus !== "approved" && (
@@ -1073,7 +1263,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                 )}
               </main>
             </div>
-          </Card>
+          </div>
 
           {/* Edit Campaign Details sheet */}
           <Sheet open={editDetailsOpen} onOpenChange={setEditDetailsOpen}>
@@ -1309,26 +1499,35 @@ function StatChip({
   label,
   value,
   tone,
+  icon,
+  iconBg,
 }: {
   label: string;
   value: number;
   tone: "neutral" | "success" | "destructive" | "warning";
+  icon: React.ReactNode;
+  iconBg: string;
 }) {
   return (
-    <div className="rounded-xl border bg-card px-5 py-4 shadow-sm">
-      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
+    <div className="rounded-xl border bg-card px-4 py-4 shadow-sm flex items-center gap-3">
+      <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", iconBg)}>
+        {icon}
       </div>
-      <div
-        className={cn(
-          "mt-1.5 text-2xl font-bold tabular-nums",
-          tone === "neutral" && "text-foreground",
-          tone === "success" && "text-emerald-600",
-          tone === "destructive" && "text-destructive",
-          tone === "warning" && "text-amber-500"
-        )}
-      >
-        {value}
+      <div>
+        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </div>
+        <div
+          className={cn(
+            "mt-0.5 text-2xl font-bold tabular-nums",
+            tone === "neutral" && "text-foreground",
+            tone === "success" && "text-emerald-600",
+            tone === "destructive" && "text-destructive",
+            tone === "warning" && "text-amber-500"
+          )}
+        >
+          {value}
+        </div>
       </div>
     </div>
   );

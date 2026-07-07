@@ -24,6 +24,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const emails = await prisma.campaignEmail.findMany({
     where: {
       campaignId: id,
+      OR: [
+        { status: "sent" },
+        { contact: { status: { not: "suppressed" } } },
+      ],
       ...(approvalStatus ? { approvalStatus: approvalStatus as "pending" | "approved" | "rejected" | "skipped" } : {}),
       ...(status ? { status: status as "pending" | "generated" | "approved" | "rejected" | "skipped" | "sending" | "sent" | "failed" } : {}),
     },
@@ -36,6 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           lastName: true,
           company: true,
           jobTitle: true,
+          status: true,
         },
       },
       deliveryEvents: {
@@ -52,6 +57,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const total = await prisma.campaignEmail.count({
     where: {
       campaignId: id,
+      OR: [
+        { status: "sent" },
+        { contact: { status: { not: "suppressed" } } },
+      ],
       ...(approvalStatus ? { approvalStatus: approvalStatus as "pending" | "approved" | "rejected" | "skipped" } : {}),
     },
   });

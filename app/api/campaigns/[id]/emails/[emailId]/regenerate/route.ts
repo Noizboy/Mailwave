@@ -7,7 +7,7 @@ import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS, 
 export const runtime = "nodejs";
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; emailId: string }> }
 ) {
   const session = await auth();
@@ -74,6 +74,9 @@ export async function POST(
     customFields: contact.customFields as Record<string, string> | null,
   });
 
+  const body = await req.json().catch(() => ({}));
+  const target: "subject" | "body" = body.target === "subject" ? "subject" : "body";
+
   try {
     const result = await generateEmail({
       provider: provider as "openai" | "anthropic" | "google_gemini" | "openrouter" | "custom",
@@ -84,19 +87,23 @@ export async function POST(
       userPrompt,
     });
 
+    const updateData =
+      target === "subject"
+        ? { subject: result.subject, modelUsed: model }
+        : {
+            body: result.body,
+            personalizationNotes: result.personalizationNotes,
+            promptUsed: userPrompt,
+            modelUsed: model,
+            generatedAt: new Date(),
+            status: "generated",
+            approvalStatus: "pending",
+            errorReason: null,
+          };
+
     const updated = await prisma.campaignEmail.update({
       where: { id: emailId },
-      data: {
-        subject: result.subject,
-        body: result.body,
-        personalizationNotes: result.personalizationNotes,
-        promptUsed: userPrompt,
-        modelUsed: model,
-        generatedAt: new Date(),
-        status: "generated",
-        approvalStatus: "pending",
-        errorReason: null,
-      },
+      data: updateData,
     });
 
     return NextResponse.json({ ok: true, subject: updated.subject, body: updated.body });
