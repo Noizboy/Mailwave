@@ -12,6 +12,7 @@ vi.mock("@/lib/jobs/queue", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
+import { __resetRateLimitStore } from "@/lib/rate-limit";
 import { mockSession, jsonRequest, routeParams } from "@/test/api-helpers";
 import { GET as getCampaigns, POST as createCampaign } from "./route";
 import { POST as generateCampaign } from "./[id]/generate/route";
@@ -32,10 +33,12 @@ const campaign = {
 };
 
 describe("api/campaigns", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockSession("user-1");
     queueAdd.mockResolvedValue({ id: "job-1" });
+    // SEC-004: reset the per-user generation quota between tests.
+    await __resetRateLimitStore();
   });
 
   describe("GET /api/campaigns", () => {
@@ -192,6 +195,30 @@ describe("api/campaigns", () => {
         { campaignId: "camp-1", userId: "user-1" },
         expect.objectContaining({ jobId: expect.stringMatching(/^generate-camp-1-\d+$/) })
       );
+    });
+
+    // SEC-004: more than 3 generation requests/min/user from the same user
+    // return 429 without enqueuing jobs.
+    it("returns 429 once the 3/min per-user quota is exceeded", async () => {
+      mocked(prisma.campaign.findFirst).mockResolvedValue(campaign as never);
+      mocked(prisma.aiConfig.findFirst).mockResolvedValue({ id: "ai-1" } as never);
+      mocked(prisma.campaignEmail.updateMany).mockResolvedValue({ count: 0 } as never);
+      mocked(prisma.campaign.update).mockResolvedValue({} as never);
+
+      for (let i = 0; i < 3; i++) {
+        const res = await generateCampaign(
+          jsonRequest("/api/campaigns/camp-1/generate", { method: "POST" }),
+          routeParams({ id: "camp-1" })
+        );
+        expect(res.status).toBe(200);
+      }
+      const fourth = await generateCampaign(
+        jsonRequest("/api/campaigns/camp-1/generate", { method: "POST" }),
+        routeParams({ id: "camp-1" })
+      );
+      expect(fourth.status).toBe(429);
+      expect(fourth.headers.get("retryafter")).toBeTruthy();
+      expect(queueAdd).toHaveBeenCalledTimes(3);
     });
   });
 

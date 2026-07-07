@@ -1,13 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { getGenerateQueue } from "@/lib/jobs/queue";
 
 export const runtime = "nodejs";
 
+// SEC-004: cap AI-generation job submissions at 3/min/user to avoid
+// saturating the queue and burning the user's AI credits in parallel.
+const CAMPAIGN_GENERATE_MAX = 3;
+const CAMPAIGN_GENERATE_WINDOW_MS = 60 * 1000;
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const rl = await checkRateLimit(`campaign-generate:${session.user.id}`, CAMPAIGN_GENERATE_MAX, CAMPAIGN_GENERATE_WINDOW_MS);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: `Too many generation requests. Try again in ${rl.retryAfterSeconds}s.` },
+      { status: 429, headers: { RetryAfter: String(rl.retryAfterSeconds) } }
+    );
+  }
 
   const { id } = await params;
 

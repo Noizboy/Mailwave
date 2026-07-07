@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { z } from "zod";
 import nodemailer from "nodemailer";
 
 function humanizeSmtpError(raw: string): string {
@@ -17,9 +19,22 @@ function humanizeSmtpError(raw: string): string {
 
 export const runtime = "nodejs";
 
+// SEC-002: cap real SMTP sends at 5/min/user so a caller cannot burn their
+// provider quota through this endpoint.
+const SMTP_TEST_MAX = 5;
+const SMTP_TEST_WINDOW_MS = 60 * 1000;
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const rl = await checkRateLimit(`smtp-test:${session.user.id}`, SMTP_TEST_MAX, SMTP_TEST_WINDOW_MS);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: `Too many SMTP test requests. Try again in ${rl.retryAfterSeconds}s.` },
+      { status: 429, headers: { RetryAfter: String(rl.retryAfterSeconds) } }
+    );
+  }
 
   const config = await prisma.smtpConfig.findUnique({ where: { userId: session.user.id } });
   if (!config || !config.host || !config.encryptedPassword) {
@@ -27,8 +42,16 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const testEmail: string | undefined =
-    typeof body.testEmail === "string" && body.testEmail.trim() ? body.testEmail.trim() : undefined;
+  // SEC-001: validate the test email format before opening an SMTP connection.
+  // The field is optional — when absent, the endpoint only runs `verify()`.
+  let testEmail: string | undefined;
+  if (typeof body.testEmail === "string" && body.testEmail.trim()) {
+    const parsed = z.email().safeParse(body.testEmail.trim());
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid test email format." }, { status: 400 });
+    }
+    testEmail = parsed.data;
+  }
 
   let success = false;
   let errorMessage: string | null = null;
@@ -40,7 +63,10 @@ export async function POST(req: NextRequest) {
       port: config.port ?? 587,
       secure: config.encryption === "ssl",
       auth: { user: config.username ?? "", pass: password },
-      ...(config.encryption === "none" ? { tls: { rejectUnauthorized: false } } : {}),
+      // Note: when encryption === "none", nodemailer will not upgrade to TLS,
+      // so rejectUnauthorized is irrelevant. For "tls"/"ssl" we keep the
+      // default (cert validation ON). Never disable cert validation — it
+      // enables MITM when STARTTLS is negotiated (CN-007).
     });
 
     if (testEmail) {

@@ -5,6 +5,27 @@ const verify = vi.fn();
 
 vi.mock("@/lib/auth");
 vi.mock("@/lib/prisma");
+vi.mock("@/lib/ssrf", () => ({
+  // SSRF check stubbed in tests — always allow (hermetic, no DNS).
+  assertSafeHost: vi.fn().mockResolvedValue({ ok: true }),
+}));
+vi.mock("@/lib/password-policy", () => ({
+  // Stub the policy: enforce length locally (pure), skip the HIBP network call.
+  validatePassword: vi.fn(async (pw: string) => {
+    if (typeof pw !== "string" || pw.length < 12) {
+      return { ok: false, reason: "Password must be at least 12 characters long." };
+    }
+    if (pw.length > 128) {
+      return { ok: false, reason: "Password must be at most 128 characters long." };
+    }
+    return { ok: true };
+  }),
+  validatePasswordLength: vi.fn((pw: string) => {
+    if (typeof pw !== "string" || pw.length < 12) return { ok: false, reason: "too short" };
+    if (pw.length > 128) return { ok: false, reason: "too long" };
+    return { ok: true };
+  }),
+}));
 vi.mock("nodemailer", () => ({
   default: { createTransport: vi.fn(() => ({ verify })) },
 }));
@@ -12,6 +33,7 @@ vi.mock("nodemailer", () => ({
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { encrypt, decrypt } from "@/lib/crypto";
+import { __resetRateLimitStore } from "@/lib/rate-limit";
 import { mockSession, jsonRequest } from "@/test/api-helpers";
 import { GET as getSmtp, PUT as putSmtp } from "./smtp/route";
 import { POST as testSmtp } from "./smtp/test/route";
@@ -35,9 +57,12 @@ describe("api/settings", () => {
     process.env.ENCRYPTION_KEY = "settings-test-key-with-32-chars-min";
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockSession("user-1");
+    // SEC-002/SEC-003: each test starts with a fresh in-memory rate-limit
+    // window so the per-user quota doesn't leak across cases.
+    await __resetRateLimitStore();
   });
 
   describe("GET /api/settings/smtp — secret masking", () => {
@@ -155,6 +180,49 @@ describe("api/settings", () => {
         })
       );
     });
+
+    // SEC-001: invalid testEmail must be rejected before any SMTP work.
+    it("rejects a malformed testEmail with 400 before opening SMTP", async () => {
+      mocked(prisma.smtpConfig.findUnique).mockResolvedValue({
+        userId: "user-1",
+        host: "smtp.example.com",
+        port: 587,
+        username: "sender",
+        encryption: "tls",
+        encryptedPassword: encrypt("pw"),
+      } as never);
+      mocked(prisma.smtpConfig.update).mockResolvedValue({} as never);
+
+      const res = await testSmtp(
+        jsonRequest("/api/settings/smtp/test", { method: "POST", body: { testEmail: "no-es-un-email" } })
+      );
+
+      expect(res.status).toBe(400);
+      expect(verify).not.toHaveBeenCalled();
+      expect(prisma.smtpConfig.update).not.toHaveBeenCalled();
+    });
+
+    // SEC-002: more than 5 calls/min/user from the same user return 429.
+    it("returns 429 once the 5/min per-user quota is exceeded", async () => {
+      mocked(prisma.smtpConfig.findUnique).mockResolvedValue({
+        userId: "user-1",
+        host: "smtp.example.com",
+        port: 587,
+        username: "sender",
+        encryption: "tls",
+        encryptedPassword: encrypt("pw"),
+      } as never);
+      verify.mockResolvedValue(true);
+      mocked(prisma.smtpConfig.update).mockResolvedValue({} as never);
+
+      for (let i = 0; i < 5; i++) {
+        const res = await testSmtp(jsonRequest("/api/settings/smtp/test", { method: "POST", body: {} }));
+        expect(res.status).toBe(200);
+      }
+      const sixth = await testSmtp(jsonRequest("/api/settings/smtp/test", { method: "POST", body: {} }));
+      expect(sixth.status).toBe(429);
+      expect(sixth.headers.get("retryafter")).toBeTruthy();
+    });
   });
 
   describe("GET/PUT /api/settings/ai", () => {
@@ -215,11 +283,21 @@ describe("api/settings", () => {
       expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
-    it("rejects a new password shorter than 8 chars", async () => {
+    it("rejects a new password shorter than 12 chars", async () => {
       const res = await changePassword(
         jsonRequest("/api/settings/account/password", {
           method: "POST",
           body: { currentPassword: "correct-password", newPassword: "short" },
+        })
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects a new password equal to the current one", async () => {
+      const res = await changePassword(
+        jsonRequest("/api/settings/account/password", {
+          method: "POST",
+          body: { currentPassword: "same-password-12", newPassword: "same-password-12" },
         })
       );
       expect(res.status).toBe(400);
