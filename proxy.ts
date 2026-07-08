@@ -2,7 +2,10 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const publicPaths = ["/login", "/signup", "/api/auth", "/api/track"];
+// /api/health is the Docker HEALTHCHECK target — must stay public (the route
+// returns 200 {"status":"ok"} with no DB/auth). Without this, the middleware
+// returns 401 and the container never becomes healthy.
+const publicPaths = ["/login", "/signup", "/api/auth", "/api/track", "/api/health"];
 
 export default auth((req: NextRequest & { auth: unknown }) => {
   const { pathname } = req.nextUrl;
