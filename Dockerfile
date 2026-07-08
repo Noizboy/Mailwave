@@ -65,9 +65,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # Prisma generated client + schema (needed at runtime).
+# NOTE: Prisma 7's `prisma-client` generator emits to the schema's `output`
+# dir (app/generated/prisma) and no longer creates node_modules/.prisma,
+# so we only copy the generated client + the @prisma runtime packages.
 COPY --from=builder --chown=nextjs:nodejs /app/app/generated/prisma ./app/generated/prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 
 # App entrypoint (waits for Postgres, then exec node server.js).
@@ -105,7 +107,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
     && groupadd --system --gid 1001 nodejs \
     && useradd --system --uid 1001 --gid nodejs nextjs
 
-# Full node_modules (incl. tsx, prisma CLI, @prisma, .prisma).
+# Full node_modules (incl. tsx, prisma CLI, @prisma/client, @prisma/adapter-pg).
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 # Worker source + transitive imports.
 COPY --from=builder --chown=nextjs:nodejs /app/jobs ./jobs
