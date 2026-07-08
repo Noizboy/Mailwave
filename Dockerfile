@@ -126,7 +126,13 @@ RUN chmod +x /app/worker-entrypoint.sh
 
 USER nextjs
 
-ENV NODE_ENV=production
+# Non-root uid 1001 has no real $HOME (useradd --system creates none).
+# npx/npm and Prisma need writable HOME + npm cache, else they EACCES and
+# exit 1 with no output — which is exactly what blocked the `migrate`
+# one-shot service in Easypanel. /tmp is world-writable in the slim image.
+ENV NODE_ENV=production \
+    HOME=/tmp \
+    NPM_CONFIG_CACHE=/tmp/.npm
 
 ENTRYPOINT ["/app/worker-entrypoint.sh"]
 CMD ["npx", "tsx", "jobs/worker.ts"]

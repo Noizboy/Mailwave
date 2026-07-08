@@ -10,6 +10,8 @@
 # owns them to avoid races between scaled worker replicas.
 #
 # Runs as the non-root `nextjs` user (uid 1001) set in the Dockerfile.
+# HOME=/tmp and NPM_CONFIG_CACHE=/tmp/.npm are set in the Dockerfile worker
+# stage so npx/npm don't EACCES on a missing home dir.
 
 set -e
 
@@ -76,5 +78,7 @@ Promise.all([
 });
 '
 
-echo "[worker-entrypoint] starting: npx tsx jobs/worker.ts"
-exec npx tsx jobs/worker.ts
+echo "[worker-entrypoint] starting: node_modules/.bin/tsx jobs/worker.ts"
+# Call the tsx binary directly instead of `npx tsx` so we don't depend on
+# npx's cache being writable (the failure mode that blocked migrate).
+exec node_modules/.bin/tsx jobs/worker.ts

@@ -55,15 +55,28 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-mailwave}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mailwave}?schema=public}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    # Run the prisma binary directly (not `npx prisma`) so we don't depend
+    # on npx's cache being writable under uid 1001 — that was the silent
+    # EACCES failure that made this service exit 1 with no output in Easypanel.
+    # HOME=/tmp + NPM_CONFIG_CACHE=/tmp/.npm are already baked into the worker
+    # image (Dockerfile) and apply here too.
     entrypoint: ["sh", "-c"]
     command:
       - |
+        set -x
+        # Masked DATABASE_URL so we can confirm it reached the container
+        # without leaking the password in docker logs.
+        echo "[migrate] DATABASE_URL=$$(printf '%s' "$$DATABASE_URL" | sed 's#://[^@]*@#://***:***@#')"
+        if [ -z "$$DATABASE_URL" ]; then
+          echo "[migrate] FATAL: DATABASE_URL is empty (set POSTGRES_PASSWORD/DATABASE_URL in the Easypanel project env)" >&2
+          exit 2
+        fi
         if [ -d prisma/migrations ] && [ -n "$$(ls -A prisma/migrations 2>/dev/null)" ]; then
           echo "[migrate] applying prisma migrate deploy";
-          npx prisma migrate deploy;
+          node_modules/.bin/prisma migrate deploy;
         else
           echo "[migrate] no versioned migrations found, running prisma db push";
-          npx prisma db push --accept-data-loss=false;
+          node_modules/.bin/prisma db push --accept-data-loss=false;
         fi
     depends_on:
       postgres:
