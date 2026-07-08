@@ -330,7 +330,6 @@ Variables (ver `.env.example`):
 | `NEXTAUTH_URL` | URL base pública (usada en pixel de tracking). |
 | `ENCRYPTION_KEY` | Clave AES-256-GCM (≥32 chars) para cifrar credenciales. |
 | `REDIS_URL` | URL de Redis para BullMQ. |
-| `OPENAI_CLIENT_ID` / `OPENAI_CLIENT_SECRET` | OAuth PKCE de Codex. |
 
 ---
 
