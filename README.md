@@ -135,10 +135,20 @@ For the full stack with app, worker, PostgreSQL, and Redis:
 
 ```bash
 copy .env.docker.example .env
-docker compose up -d --build
+docker compose -f docker-compose.local.yml up -d --build
 ```
 
 See [docs/docker.md](docs/docker.md) for the full Docker guide.
+
+## Easypanel
+
+For Easypanel Compose, use `docker-compose.yml` directly. It now ships as the
+default GitHub deploy file for the full stack: app, worker, PostgreSQL, and
+Redis.
+
+See [docs/easypanel-installation.md](docs/easypanel-installation.md) for the
+step-by-step installation guide and [docs/easypanel.md](docs/easypanel.md) for
+the technical deployment reference.
 
 ## Design System
 

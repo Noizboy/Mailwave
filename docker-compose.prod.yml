@@ -1,8 +1,8 @@
 # Mailwave — production compose override.
 #
-# Apply on top of the base file:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Apply on top of the local base file:
+#   docker compose -f docker-compose.local.yml -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.local.yml -f docker-compose.prod.yml up -d
 #
 # Differences vs. base:
 #   - Pulls pre-built images from a registry instead of building. Do NOT pass
@@ -23,8 +23,8 @@
 #        docker push ghcr.io/<org>/mailwave:latest
 #        docker push ghcr.io/<org>/mailwave-worker:latest
 #   2. Set MAILWAVE_APP_IMAGE / MAILWAVE_WORKER_IMAGE env vars (or edit below).
-#   3. docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-#   4. docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   3. docker compose -f docker-compose.local.yml -f docker-compose.prod.yml pull
+#   4. docker compose -f docker-compose.local.yml -f docker-compose.prod.yml up -d
 
 services:
   postgres:

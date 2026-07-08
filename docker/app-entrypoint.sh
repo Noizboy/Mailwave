@@ -1,15 +1,15 @@
 #!/bin/sh
 # Mailwave app container entrypoint.
 #
-# Responsibilities (kept minimal by design — see docs/docker.md):
-#   1. Wait for Postgres to accept connections (defensive; depends_on already
-#      guarantees service_healthy, but this also covers manual `docker run`).
-#   2. exec node server.js so signals reach the Next.js process directly.
+# Responsibilities (kept minimal by design; see docs/docker.md):
+#   1. Wait for Postgres to accept connections.
+#   2. Optionally run Prisma migrations when RUN_MIGRATIONS=true.
+#   3. exec node server.js so signals reach the Next.js process directly.
 #
-# Migrations are NOT run here. The dedicated one-shot `migrate` service owns
-# migrations (see docker-compose.yml) to avoid races between scaled app
-# replicas. If you run the app outside compose, run `npx prisma migrate deploy`
-# (or `npx prisma db push` when no migrations exist) before starting it.
+# By default migrations are NOT run here. The dedicated one-shot `migrate`
+# service owns migrations (see docker-compose.yml) to avoid races between
+# scaled app replicas. For Easypanel's simpler service model you can opt in
+# with RUN_MIGRATIONS=true on exactly one app replica.
 #
 # Runs as the non-root `nextjs` user (uid 1001) set in the Dockerfile.
 
@@ -44,7 +44,7 @@ fi
 
 echo "[app-entrypoint] waiting for Postgres at ${PG_HOST}:${PG_PORT} ..."
 
-# Node-based TCP probe — no external deps required in the slim image.
+# Node-based TCP probe; no external deps required in the slim image.
 node -e '
 const net = require("net");
 const host = process.env.PG_HOST;
@@ -69,9 +69,39 @@ tryOnce(1).then((ok) => {
     console.error("[app-entrypoint] Postgres not reachable after " + max + " attempts, exiting");
     process.exit(1);
   }
-  console.log("[app-entrypoint] Postgres is reachable, starting app");
+  console.log("[app-entrypoint] Postgres is reachable, continuing startup");
 });
 '
+
+if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
+  if [ ! -x node_modules/.bin/prisma ]; then
+    echo "[app-entrypoint] RUN_MIGRATIONS=true but node_modules/.bin/prisma is missing" >&2
+    exit 1
+  fi
+
+  strategy="${MIGRATION_STRATEGY:-auto}"
+  echo "[app-entrypoint] running Prisma migrations with strategy=${strategy}"
+
+  case "$strategy" in
+    deploy)
+      node_modules/.bin/prisma migrate deploy
+      ;;
+    push)
+      node_modules/.bin/prisma db push --accept-data-loss=false
+      ;;
+    auto|"")
+      if [ -d prisma/migrations ] && [ -n "$(ls -A prisma/migrations 2>/dev/null)" ]; then
+        node_modules/.bin/prisma migrate deploy
+      else
+        node_modules/.bin/prisma db push --accept-data-loss=false
+      fi
+      ;;
+    *)
+      echo "[app-entrypoint] invalid MIGRATION_STRATEGY='$strategy' (expected auto, deploy, or push)" >&2
+      exit 1
+      ;;
+  esac
+fi
 
 echo "[app-entrypoint] starting: node server.js"
 exec node server.js

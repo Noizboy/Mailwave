@@ -1,21 +1,34 @@
 name: mailwave
 
-# Easypanel deployment. Set the following in the Easypanel project env:
-#   POSTGRES_PASSWORD  (required — postgres is initialized with this)
-#   AUTH_SECRET        (openssl rand -base64 32)
-#   ENCRYPTION_KEY     (openssl rand -hex 16, >=32 chars)
-#   NEXTAUTH_URL       (https://your-domain.com)
-#   REDIS_URL          (defaults to redis://redis:6379)
-# DATABASE_URL is auto-derived from POSTGRES_USER/PASSWORD/DB so it can't
-# drift from the postgres service credentials. Override DATABASE_URL only
-# if you point the app at an external managed Postgres (you still must set
-# POSTGRES_PASSWORD for the in-compose postgres, or remove that service).
+# Mailwave - Easypanel Compose deployment.
+#
+# Goal:
+# - Create one Easypanel service of type "Compose"
+# - Point it at this repository
+# - Configure environment variables
+# - Deploy
+#
+# Required project env:
+#   APP_DOMAIN         Public host, e.g. mailwave.example.com
+#   NEXTAUTH_URL       Full public URL, e.g. https://mailwave.example.com
+#   POSTGRES_PASSWORD  Password for the bundled postgres service
+#   AUTH_SECRET        openssl rand -base64 32
+#   ENCRYPTION_KEY     openssl rand -hex 16 (32+ chars)
+#
+# Optional project env:
+#   POSTGRES_USER           Defaults to mailwave
+#   POSTGRES_DB             Defaults to mailwave
+#   AUTH_TRUST_HOST         Defaults to true
+#   NEXT_PUBLIC_APP_VERSION Defaults to 1.0.0
+#   REDIS_URL               Defaults to redis://redis:6379
+#   TRAEFIK_NETWORK         Defaults to easypanel
+#   TRAEFIK_CERT_RESOLVER   Defaults to letsencrypt
+#   TRAEFIK_HTTP_MIDDLEWARE Defaults to redirect-to-https
+#
+# Local Docker development now lives in docker-compose.local.yml.
 
-# Reusable DATABASE_URL — always derived from POSTGRES_* so a stale dev
-# DATABASE_URL in .env (which Easypanel may reset on every deploy) can't
-# poison the containers. Override POSTGRES_USER/PASSWORD/DB in the project
-# env, not DATABASE_URL.
 x-database-url: &database-url "postgresql://${POSTGRES_USER:-mailwave}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mailwave}?schema=public"
+x-redis-url: &redis-url "${REDIS_URL:-redis://redis:6379}"
 
 services:
   postgres:
@@ -23,9 +36,6 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mailwave}
-      # Required: fail loudly instead of silently initializing with a blank
-      # password (the source of the "POSTGRES_PASSWORD variable is not set"
-      # warning + an insecure postgres).
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in the Easypanel project env}
       POSTGRES_DB: ${POSTGRES_DB:-mailwave}
     volumes:
@@ -60,30 +70,12 @@ services:
     restart: "no"
     environment:
       DATABASE_URL: *database-url
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-    # Run the prisma binary directly (not `npx prisma`) so we don't depend
-    # on npx's cache being writable under uid 1001 — that was the silent
-    # EACCES failure that made this service exit 1 with no output in Easypanel.
-    # HOME=/tmp + NPM_CONFIG_CACHE=/tmp/.npm are already baked into the worker
-    # image (Dockerfile) and apply here too.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in the Easypanel project env}
     entrypoint: ["sh", "-c"]
     command:
       - |
-        set -x
-        # Masked DATABASE_URL so we can confirm it reached the container
-        # without leaking the password in docker logs.
-        echo "[migrate] DATABASE_URL=$$(printf '%s' "$$DATABASE_URL" | sed 's#://[^@]*@#://***:***@#')"
-        if [ -z "$$DATABASE_URL" ]; then
-          echo "[migrate] FATAL: DATABASE_URL is empty (set POSTGRES_PASSWORD/DATABASE_URL in the Easypanel project env)" >&2
-          exit 2
-        fi
-        if [ -d prisma/migrations ] && [ -n "$$(ls -A prisma/migrations 2>/dev/null)" ]; then
-          echo "[migrate] applying prisma migrate deploy";
-          node_modules/.bin/prisma migrate deploy;
-        else
-          echo "[migrate] no versioned migrations found, running prisma db push";
-          node_modules/.bin/prisma db push --accept-data-loss=false;
-        fi
+        echo "[migrate] applying prisma migrate deploy"
+        node_modules/.bin/prisma migrate deploy
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,16 +89,11 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: *database-url
-      AUTH_SECRET: ${AUTH_SECRET}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://mailwave.ffat15.com}
-      # Auth.js v5 rejects requests whose Host header doesn't match
-      # NEXTAUTH_URL with "UntrustedHost". Behind the Easypanel proxy the
-      # in-container .env AUTH_TRUST_HOST never reaches the app (the
-      # `environment:` block is explicit, .env only does ${VAR} substitution),
-      # so expose it here. Safe behind the proxy.
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set in the Easypanel project env}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL must be set in the Easypanel project env}
       AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      REDIS_URL: redis://redis:6379
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in the Easypanel project env}
+      REDIS_URL: *redis-url
       NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-1.0.0}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
@@ -120,29 +107,22 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    # Traefik routing for the public domain. Easypanel's file-provider
-    # router for mailwave.ffat15.com points at a broken
-    # "website_mailwave_undefined:80" backend (the domain was added at
-    # project level, so Easypanel couldn't resolve the target service).
-    # These Docker-provider labels take precedence via priority 100 and
-    # route directly to app:3001 on the shared attachable `easypanel`
-    # overlay network that easypanel-traefik lives on.
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=easypanel"
-      - "traefik.http.routers.mailwave-http.rule=Host(`mailwave.ffat15.com`)"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-easypanel}"
+      - "traefik.http.routers.mailwave-http.rule=Host(`${APP_DOMAIN:?APP_DOMAIN must be set in the Easypanel project env}`)"
       - "traefik.http.routers.mailwave-http.entrypoints=http"
       - "traefik.http.routers.mailwave-http.priority=100"
-      - "traefik.http.routers.mailwave-http.middlewares=redirect-to-https"
-      - "traefik.http.routers.mailwave-https.rule=Host(`mailwave.ffat15.com`)"
+      - "traefik.http.routers.mailwave-http.middlewares=${TRAEFIK_HTTP_MIDDLEWARE:-redirect-to-https}"
+      - "traefik.http.routers.mailwave-https.rule=Host(`${APP_DOMAIN:?APP_DOMAIN must be set in the Easypanel project env}`)"
       - "traefik.http.routers.mailwave-https.entrypoints=https"
       - "traefik.http.routers.mailwave-https.priority=100"
       - "traefik.http.routers.mailwave-https.tls=true"
-      - "traefik.http.routers.mailwave-https.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.mailwave-https.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
       - "traefik.http.services.mailwave.loadbalancer.server.port=3001"
     networks:
       - mailwave-net
-      - easypanel
+      - proxy
 
   worker:
     build:
@@ -151,9 +131,9 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: *database-url
-      AUTH_SECRET: ${AUTH_SECRET}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      REDIS_URL: redis://redis:6379
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set in the Easypanel project env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in the Easypanel project env}
+      REDIS_URL: *redis-url
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       REDIS_HOST: redis
@@ -171,10 +151,9 @@ services:
 networks:
   mailwave-net:
     driver: bridge
-  # Shared attachable overlay network that easypanel-traefik lives on.
-  # Lets traefik (swarm) reach this standalone compose container by IP.
-  easypanel:
+  proxy:
     external: true
+    name: ${TRAEFIK_NETWORK:-easypanel}
 
 volumes:
   pgdata:

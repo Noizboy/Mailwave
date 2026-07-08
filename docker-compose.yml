@@ -1,17 +1,34 @@
-# Mailwave — local Docker Compose orchestration.
-#
-# Boots the full stack with a single command:
-#   copy .env.docker.example .env   (then edit secrets)
-#   docker compose up -d --build
-#
-# Services: postgres, redis, migrate (one-shot), app, worker.
-# Network:  mailwave-net (shared).
-# Volumes:  pgdata, redisdata.
-#
-# Production override: docker-compose.prod.yml (see docs/docker.md).
-# Requires Docker Compose v2 (uses service_healthy / service_completed_successfully).
-
 name: mailwave
+
+# Mailwave - Easypanel Compose deployment.
+#
+# Goal:
+# - Create one Easypanel service of type "Compose"
+# - Point it at this repository
+# - Configure environment variables
+# - Deploy
+#
+# Required project env:
+#   APP_DOMAIN         Public host, e.g. mailwave.example.com
+#   NEXTAUTH_URL       Full public URL, e.g. https://mailwave.example.com
+#   POSTGRES_PASSWORD  Password for the bundled postgres service
+#   AUTH_SECRET        openssl rand -base64 32
+#   ENCRYPTION_KEY     openssl rand -hex 16 (32+ chars)
+#
+# Optional project env:
+#   POSTGRES_USER           Defaults to mailwave
+#   POSTGRES_DB             Defaults to mailwave
+#   AUTH_TRUST_HOST         Defaults to true
+#   NEXT_PUBLIC_APP_VERSION Defaults to 1.0.0
+#   REDIS_URL               Defaults to redis://redis:6379
+#   TRAEFIK_NETWORK         Defaults to easypanel
+#   TRAEFIK_CERT_RESOLVER   Defaults to letsencrypt
+#   TRAEFIK_HTTP_MIDDLEWARE Defaults to redirect-to-https
+#
+# Local Docker development now lives in docker-compose.local.yml.
+
+x-database-url: &database-url "postgresql://${POSTGRES_USER:-mailwave}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mailwave}?schema=public"
+x-redis-url: &redis-url "${REDIS_URL:-redis://redis:6379}"
 
 services:
   postgres:
@@ -19,14 +36,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mailwave}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in the Easypanel project env}
       POSTGRES_DB: ${POSTGRES_DB:-mailwave}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    # Dev-friendly: publish 5432 so host tooling (Prisma Studio, psql) can
-    # connect. The production override removes this binding.
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mailwave} -d ${POSTGRES_DB:-mailwave}"]
       interval: 5s
@@ -41,9 +54,6 @@ services:
     restart: unless-stopped
     volumes:
       - redisdata:/data
-    # Dev-friendly: publish 6379. Removed in production override.
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -54,28 +64,18 @@ services:
       - mailwave-net
 
   migrate:
-    # One-shot migration container. Uses the worker image (full node_modules
-    # incl. prisma CLI + schema + generated client). Runs `prisma migrate
-    # deploy` when versioned migrations exist, otherwise falls back to
-    # `prisma db push` (no data loss). See follow-up DOCKER-011 for
-    # establishing versioned migrations.
     build:
       context: .
       target: worker
     restart: "no"
-    env_file:
-      - .env
-    # Clear the worker entrypoint and run the migration command directly.
+    environment:
+      DATABASE_URL: *database-url
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in the Easypanel project env}
     entrypoint: ["sh", "-c"]
     command:
       - |
-        if [ -d prisma/migrations ] && [ -n "$$(ls -A prisma/migrations 2>/dev/null)" ]; then
-          echo "[migrate] applying prisma migrate deploy";
-          npx prisma migrate deploy;
-        else
-          echo "[migrate] no versioned migrations found, running prisma db push";
-          npx prisma db push --accept-data-loss=false;
-        fi
+        echo "[migrate] applying prisma migrate deploy"
+        node_modules/.bin/prisma migrate deploy
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,16 +87,19 @@ services:
       context: .
       target: runner
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
-      # Internal hostnames so the entrypoint probe targets the right host.
+      DATABASE_URL: *database-url
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set in the Easypanel project env}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL must be set in the Easypanel project env}
+      AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in the Easypanel project env}
+      REDIS_URL: *redis-url
+      NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-1.0.0}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-    ports:
-      - "3001:3001"
+      PORT: "3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,17 +107,33 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-easypanel}"
+      - "traefik.http.routers.mailwave-http.rule=Host(`${APP_DOMAIN:?APP_DOMAIN must be set in the Easypanel project env}`)"
+      - "traefik.http.routers.mailwave-http.entrypoints=http"
+      - "traefik.http.routers.mailwave-http.priority=100"
+      - "traefik.http.routers.mailwave-http.middlewares=${TRAEFIK_HTTP_MIDDLEWARE:-redirect-to-https}"
+      - "traefik.http.routers.mailwave-https.rule=Host(`${APP_DOMAIN:?APP_DOMAIN must be set in the Easypanel project env}`)"
+      - "traefik.http.routers.mailwave-https.entrypoints=https"
+      - "traefik.http.routers.mailwave-https.priority=100"
+      - "traefik.http.routers.mailwave-https.tls=true"
+      - "traefik.http.routers.mailwave-https.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+      - "traefik.http.services.mailwave.loadbalancer.server.port=3001"
     networks:
       - mailwave-net
+      - proxy
 
   worker:
     build:
       context: .
       target: worker
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
+      DATABASE_URL: *database-url
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set in the Easypanel project env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in the Easypanel project env}
+      REDIS_URL: *redis-url
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       REDIS_HOST: redis
@@ -126,13 +145,15 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    # Scale horizontally: docker compose up -d --scale worker=3
     networks:
       - mailwave-net
 
 networks:
   mailwave-net:
     driver: bridge
+  proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK:-easypanel}
 
 volumes:
   pgdata:

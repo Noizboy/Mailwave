@@ -42,6 +42,7 @@ yarn-error.log*
 !.env.example
 !.env.docker.example
 !.env.docker.prod.example
+!.env.easypanel.example
 
 # vercel
 .vercel
