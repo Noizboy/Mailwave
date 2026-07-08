@@ -16,16 +16,19 @@
 set -e
 
 # Resolve host:port from DATABASE_URL when possible; fall back to defaults.
-PG_HOST="${POSTGRES_HOST:-postgres}"
-PG_PORT="${POSTGRES_PORT:-5432}"
+# These are read by the node probe below via process.env, so they MUST be
+# exported (plain shell vars are invisible to node -e). Easypanel deploy was
+# stuck in a restart loop because PG_HOST was unset in node -> probe hit
+# localhost:5432 -> ECONNREFUSED -> "Postgres not reachable".
+export PG_HOST="${POSTGRES_HOST:-postgres}"
+export PG_PORT="${POSTGRES_PORT:-5432}"
 
 # If DATABASE_URL is set, parse host/port out of it for a more accurate probe.
 if [ -n "${DATABASE_URL:-}" ]; then
   # Strip scheme: postgresql://user:pass@host:port/db?...
   rest="${DATABASE_URL#*://}"
-  # Strip credentials and path/query.
+  # Strip path/query (everything from the first '/').
   authority="${rest%%/*}"
-  authority="${authority%%?*}"
   # authority now is user:pass@host:port (or host:port)
   hostport="${authority##*@}"
   if [ -n "$hostport" ]; then
@@ -35,6 +38,7 @@ if [ -n "${DATABASE_URL:-}" ]; then
     if [ "$port_part" != "$hostport" ]; then
       PG_PORT="$port_part"
     fi
+    export PG_HOST PG_PORT
   fi
 fi
 

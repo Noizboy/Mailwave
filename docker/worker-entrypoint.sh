@@ -15,17 +15,19 @@
 
 set -e
 
-REDIS_HOST="${REDIS_HOST:-redis}"
-REDIS_PORT="${REDIS_PORT:-6379}"
+# These are read by the node probe below via process.env, so they MUST be
+# exported (plain shell vars are invisible to node -e). Without export, the
+# probe fell back to localhost and the worker stayed in a restart loop.
+export REDIS_HOST="${REDIS_HOST:-redis}"
+export REDIS_PORT="${REDIS_PORT:-6379}"
 
-PG_HOST="${POSTGRES_HOST:-postgres}"
-PG_PORT="${POSTGRES_PORT:-5432}"
+export PG_HOST="${POSTGRES_HOST:-postgres}"
+export PG_PORT="${POSTGRES_PORT:-5432}"
 
 # Parse REDIS_URL for an accurate probe.
 if [ -n "${REDIS_URL:-}" ]; then
   rest="${REDIS_URL#*://}"
   authority="${rest%%/*}"
-  authority="${authority%%?*}"
   hostport="${authority##*@}"
   if [ -n "$hostport" ]; then
     REDIS_HOST="${hostport%%:*}"
@@ -33,6 +35,7 @@ if [ -n "${REDIS_URL:-}" ]; then
     if [ "$port_part" != "$hostport" ]; then
       REDIS_PORT="$port_part"
     fi
+    export REDIS_HOST REDIS_PORT
   fi
 fi
 
@@ -40,7 +43,6 @@ fi
 if [ -n "${DATABASE_URL:-}" ]; then
   rest="${DATABASE_URL#*://}"
   authority="${rest%%/*}"
-  authority="${authority%%?*}"
   hostport="${authority##*@}"
   if [ -n "$hostport" ]; then
     PG_HOST="${hostport%%:*}"
@@ -48,6 +50,7 @@ if [ -n "${DATABASE_URL:-}" ]; then
     if [ "$port_part" != "$hostport" ]; then
       PG_PORT="$port_part"
     fi
+    export PG_HOST PG_PORT
   fi
 fi
 
