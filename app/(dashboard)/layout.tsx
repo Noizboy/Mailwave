@@ -1,7 +1,9 @@
 import { Sidebar, MobileSidebar } from "@/components/layout/sidebar";
 import { SidebarProvider } from "@/lib/sidebar-context";
+import { requireSession } from "@/lib/session";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  await requireSession();
   return (
     <SidebarProvider>
       <div className="flex h-screen overflow-hidden bg-background">
