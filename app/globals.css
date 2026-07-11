@@ -84,3 +84,8 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(215 16% 65%);
 }
+
+/* Ensure Sileo toast notifications always render above modals and overlays */
+[data-sileo-viewport] {
+  z-index: 9999 !important;
+}

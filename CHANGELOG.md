@@ -7,6 +7,7 @@ All notable changes to Mailwave are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **Sileo toast z-index** — Toast notifications were hidden behind modal overlays because both Sileo's viewport and Radix Dialog shared `z-index: 50`. Added a CSS override in `app/globals.css` that raises `[data-sileo-viewport]` to `z-index: 9999` so toasts always render above any modal or backdrop.
 - **`AUTH_URL` migration** — Renamed `NEXTAUTH_URL` to `AUTH_URL` across the entire project to align with Auth.js v5 (next-auth `^5.0.0-beta.31`), which expects `AUTH_URL` as its primary environment variable. Using `NEXTAUTH_URL` caused an `UnknownAction: Cannot parse action at /api/auth/*` error in production. Updated all `.env*` files, Dockerfiles, Compose files, CI workflow, and `lib/jobs/send-campaign.ts`.
 
 ### Changed
