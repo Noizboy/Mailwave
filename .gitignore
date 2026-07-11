@@ -30,6 +30,7 @@ stub.log
 worker.log
 worker_err.log
 *.log
+.run-logs/
 
 # debug
 npm-debug.log*
@@ -41,8 +42,6 @@ yarn-error.log*
 .env*
 !.env.example
 !.env.docker.example
-!.env.docker.prod.example
-!.env.easypanel.example
 
 # vercel
 .vercel
@@ -62,6 +61,6 @@ next-env.d.ts
 
 # scratch / vendor artifacts not part of the product
 /support.js
-/test-contacts.csv
+/test/fixtures/test-contacts.csv
 /MailWaveMockup.html
 /.thumbnail

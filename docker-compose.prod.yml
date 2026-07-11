@@ -14,7 +14,7 @@
 #     TLS and proxies to `app:3001` over the compose network.
 #
 # Real secrets must live in .env (gitignored) or Docker secrets — NEVER in
-# this file. See .env.docker.prod.example for the template.
+# this file.
 #
 # Operator workflow:
 #   1. Build & push images once (CI or manual):

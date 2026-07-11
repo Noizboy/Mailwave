@@ -502,6 +502,15 @@ function AiSettings() {
 
   const [selecting, setSelecting] = useState(false);
   const [setupProvider, setSetupProvider] = useState<AiApiProvider | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
+    await fetch("/api/settings/ai", { method: "DELETE" });
+    queryClient.invalidateQueries({ queryKey: ["settings-ai"] });
+    queryClient.invalidateQueries({ queryKey: ["ai-status"] });
+    setDisconnecting(false);
+  };
 
   const { data: config, isLoading } = useQuery<AiData | null>({
     queryKey: ["settings-ai"],
@@ -613,10 +622,13 @@ function AiSettings() {
             <Button
               variant="ghost"
               size="sm"
-              className="flex-1"
-              onClick={() => setSelecting(true)}
+              className="flex-1 text-destructive hover:text-destructive"
+              onClick={handleDisconnect}
+              disabled={disconnecting}
             >
-              Switch provider
+              {disconnecting
+                ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Disconnecting...</>
+                : "Disconnect"}
             </Button>
           </div>
         </div>
@@ -695,59 +707,68 @@ function AiApiKeyForm({
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(existingConfig?.model ?? "");
   const [baseUrl, setBaseUrl] = useState(existingConfig?.baseUrl ?? "");
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
+  const [replaceKey, setReplaceKey] = useState(!existingConfig);
+  const [savingStep, setSavingStep] = useState<"idle" | "saving" | "testing">("idle");
+
+  const busy = savingStep !== "idle";
 
   const handleSave = async () => {
-    setSaving(true);
-    const res = await fetch("/api/settings/ai", {
+    if (!existingConfig && !apiKey) {
+      toast.error("API key required", "Please enter your API key.");
+      return;
+    }
+    setSavingStep("saving");
+    const saveRes = await fetch("/api/settings/ai", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         provider,
         model: model || undefined,
         baseUrl: baseUrl || undefined,
-        ...(apiKey ? { apiKey } : {}),
+        ...(replaceKey && apiKey ? { apiKey } : {}),
       }),
     });
-    if (res.ok) {
-      toast.success("AI settings saved", "Your AI provider configuration has been updated.");
-      setApiKey("");
-      onSaved();
-    } else {
+    if (!saveRes.ok) {
       toast.error("Could not save AI settings", "Check your inputs and try again.");
+      setSavingStep("idle");
+      return;
     }
-    setSaving(false);
-  };
 
-  const handleTest = async () => {
-    setTesting(true);
-    const res = await fetch("/api/settings/ai/test", { method: "POST" });
-    if (res.ok) {
-      toast.success("AI connected", "Test email generated successfully. Your AI provider is ready.");
-    } else {
-      const err = await res.json();
-      toast.error("AI connection failed", err.error ?? "Check your provider, model, and API key.");
-    }
+    setSavingStep("testing");
+    const testRes = await fetch("/api/settings/ai/test", { method: "POST" });
     queryClient.invalidateQueries({ queryKey: ["settings-ai"] });
     queryClient.invalidateQueries({ queryKey: ["ai-status"] });
-    setTesting(false);
+    setSavingStep("idle");
+
+    if (testRes.ok) {
+      toast.success("AI connected", "Connection verified. Your AI provider is ready.");
+      onSaved();
+    } else {
+      const err = await testRes.json();
+      toast.error("AI connection failed", err.error ?? "Check your provider, model, and API key.");
+    }
   };
 
   return (
     <div className="space-y-4">
       <SettingField label="API Key">
-        <Input
-          type="password"
-          value={existingConfig?.id && !apiKey ? "••••••••••••••••" : apiKey}
-          onChange={(e) => {
-            const v = e.target.value;
-            setApiKey(v.startsWith("••••••••••••••••") ? v.slice(16) : v);
-          }}
-          onFocus={(e) => { if (existingConfig?.id && !apiKey) e.target.select(); }}
-          placeholder="sk-..."
-          autoComplete="off"
-        />
+        {!replaceKey ? (
+          <div className="flex gap-2">
+            <Input value="••••••••••••••••" disabled className="flex-1" />
+            <Button type="button" variant="outline" size="sm" onClick={() => setReplaceKey(true)}>
+              Replace
+            </Button>
+          </div>
+        ) : (
+          <Input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="sk-..."
+            autoComplete="off"
+            autoFocus={!!existingConfig}
+          />
+        )}
       </SettingField>
       <SettingField label="Model">
         <Input
@@ -765,27 +786,17 @@ function AiApiKeyForm({
           />
         </SettingField>
       )}
-      <div className="flex gap-2 pt-1">
-        <Button onClick={handleSave} disabled={saving} className="flex-1">
-          {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : "Save Settings"}
-        </Button>
-        <Button variant="outline" onClick={handleTest} disabled={testing || !existingConfig?.id}>
-          {testing ? <><Loader2 className="h-4 w-4 animate-spin" /> Testing...</> : "Test Connection"}
+      <div className="pt-1">
+        <Button onClick={handleSave} disabled={busy} className="w-full">
+          {savingStep === "saving" ? (
+            <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Saving...</>
+          ) : savingStep === "testing" ? (
+            <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Testing connection...</>
+          ) : (
+            "Save & Test Connection"
+          )}
         </Button>
       </div>
-      {existingConfig?.status === "connected" && (
-        <div className="flex items-center gap-2 text-sm text-green-700">
-          <CheckCircle className="h-4 w-4" />
-          Connection verified
-          {existingConfig.testedAt && ` — ${new Date(existingConfig.testedAt).toLocaleString()}`}
-        </div>
-      )}
-      {existingConfig?.status === "failed" && (
-        <div className="flex items-center gap-2 text-sm text-red-600">
-          <XCircle className="h-4 w-4" />
-          Last test failed
-        </div>
-      )}
     </div>
   );
 }

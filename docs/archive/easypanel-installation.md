@@ -33,7 +33,7 @@ In Easypanel:
 
 ## 2. Configure environment variables
 
-Use [.env.easypanel.example](../.env.easypanel.example) as the base reference.
+Use [.env.docker.example](../.env.docker.example) as the base reference.
 
 Required variables:
 
@@ -127,5 +127,5 @@ Check:
 ## Related files
 
 - Technical Easypanel reference: [easypanel.md](./easypanel.md)
-- Example environment file: [.env.easypanel.example](../.env.easypanel.example)
+- Example environment file: [.env.docker.example](../.env.docker.example)
 - Default Easypanel compose file: [docker-compose.yml](../docker-compose.yml)

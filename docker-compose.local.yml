@@ -7,6 +7,13 @@ name: mailwave
 #   docker compose -f docker-compose.local.yml up -d --build
 #
 # Easypanel Compose installs should use docker-compose.yml instead.
+#
+# This file uses the same ${VAR} substitution pattern as docker-compose.yml
+# (Easypanel). Docker Compose auto-reads .env in the project directory for
+# variable substitution, so no `env_file` directive is needed.
+
+x-database-url: &database-url "postgresql://${POSTGRES_USER:-mailwave}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-mailwave}?schema=public"
+x-redis-url: &redis-url "${REDIS_URL:-redis://redis:6379}"
 
 services:
   postgres:
@@ -50,8 +57,9 @@ services:
       context: .
       target: worker
     restart: "no"
-    env_file:
-      - .env
+    environment:
+      DATABASE_URL: *database-url
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
     entrypoint: ["sh", "-c"]
     command:
       - |
@@ -68,13 +76,19 @@ services:
       context: .
       target: runner
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
+      DATABASE_URL: *database-url
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set in .env}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3001}
+      AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
+      REDIS_URL: *redis-url
+      NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-1.0.0}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      PORT: "3001"
     ports:
       - "3001:3001"
     depends_on:
@@ -92,9 +106,11 @@ services:
       context: .
       target: worker
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
+      DATABASE_URL: *database-url
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
+      REDIS_URL: *redis-url
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       REDIS_HOST: redis

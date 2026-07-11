@@ -71,6 +71,11 @@ export async function assertSafeHost(rawHost: string): Promise<SsrfCheckResult> 
     return { ok: false, reason: "Host is required." };
   }
 
+  // In development, allow localhost and private IPs (e.g. Ollama at localhost:11434).
+  if (process.env.NODE_ENV === "development") {
+    return { ok: true };
+  }
+
   // Accept "host:port" or a full URL; extract the hostname.
   let hostname = rawHost.trim();
   try {

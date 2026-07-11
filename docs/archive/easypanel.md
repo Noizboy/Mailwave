@@ -20,7 +20,7 @@ That one compose stack includes:
 
 ## Environment variables
 
-Start from [.env.easypanel.example](/C:/Users/lexpc/Documents/Repositories/Mailwave/.env.easypanel.example).
+Start from [.env.docker.example](/C:/Users/lexpc/Documents/Repositories/Mailwave/.env.docker.example).
 
 Required:
 

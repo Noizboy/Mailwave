@@ -90,7 +90,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             Version {process.env.NEXT_PUBLIC_APP_VERSION}
           </span>
           <span className="text-[11px] text-white/30">
-            Created by Alejandro Gomez
+            Created by Alejandro Pujols
           </span>
         </div>
       )}
