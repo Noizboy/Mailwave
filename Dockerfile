@@ -48,6 +48,12 @@ ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholde
     AUTH_SECRET="build-time-placeholder-not-used-at-runtime-32chars" \
     ENCRYPTION_KEY="build-time-placeholder-not-used-at-runtime-32chars"
 
+# NEXT_PUBLIC_* vars are inlined into the client bundle at BUILD time, not
+# runtime. Pass --build-arg NEXT_PUBLIC_APP_VERSION=... to override (e.g. in
+# CI). Defaults to 1.0.0 so the sidebar version label always renders.
+ARG NEXT_PUBLIC_APP_VERSION=1.0.0
+ENV NEXT_PUBLIC_APP_VERSION=$NEXT_PUBLIC_APP_VERSION
+
 RUN npx prisma generate
 RUN npm run build
 
