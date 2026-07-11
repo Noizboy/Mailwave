@@ -9,6 +9,9 @@ All notable changes to Mailwave are documented here.
 ### Fixed
 - **`AUTH_URL` migration** — Renamed `NEXTAUTH_URL` to `AUTH_URL` across the entire project to align with Auth.js v5 (next-auth `^5.0.0-beta.31`), which expects `AUTH_URL` as its primary environment variable. Using `NEXTAUTH_URL` caused an `UnknownAction: Cannot parse action at /api/auth/*` error in production. Updated all `.env*` files, Dockerfiles, Compose files, CI workflow, and `lib/jobs/send-campaign.ts`.
 
+### Changed
+- Removed duplicate `docker-compose.easypanel.yml`. It was byte-for-byte identical to `docker-compose.yml`, which is the canonical Compose file for Easypanel installs.
+
 ---
 
 ## [ac54394] — Prepare Easypanel default deployment
