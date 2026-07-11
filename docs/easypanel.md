@@ -25,7 +25,7 @@ Start from [.env.easypanel.example](/C:/Users/lexpc/Documents/Repositories/Mailw
 Required:
 
 - `APP_DOMAIN`
-- `NEXTAUTH_URL`
+- `AUTH_URL`
 - `POSTGRES_PASSWORD`
 - `AUTH_SECRET`
 - `ENCRYPTION_KEY`

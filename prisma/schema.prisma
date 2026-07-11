@@ -56,10 +56,6 @@ model AiConfig {
   testedAt          DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
-  oauthAccessToken  String?
-  oauthConnected    Boolean            @default(false)
-  oauthExpiresAt    DateTime?
-  oauthRefreshToken String?
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -323,5 +319,4 @@ enum AiProvider {
   google_gemini
   openrouter
   custom
-  codex
 }

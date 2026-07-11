@@ -29,7 +29,7 @@ CREATE TYPE "AiConnectionStatus" AS ENUM ('connected', 'disconnected', 'invalid_
 CREATE TYPE "IntervalType" AS ENUM ('fixed', 'random');
 
 -- CreateEnum
-CREATE TYPE "AiProvider" AS ENUM ('openai', 'anthropic', 'google_gemini', 'openrouter', 'custom', 'codex');
+CREATE TYPE "AiProvider" AS ENUM ('openai', 'anthropic', 'google_gemini', 'openrouter', 'custom');
 
 -- CreateTable
 CREATE TABLE "User" (
@@ -77,10 +77,6 @@ CREATE TABLE "AiConfig" (
     "testedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "oauthAccessToken" TEXT,
-    "oauthConnected" BOOLEAN NOT NULL DEFAULT false,
-    "oauthExpiresAt" TIMESTAMP(3),
-    "oauthRefreshToken" TEXT,
 
     CONSTRAINT "AiConfig_pkey" PRIMARY KEY ("id")
 );

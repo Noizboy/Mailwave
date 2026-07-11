@@ -10,7 +10,7 @@
 # Run:
 #   docker run -p 3001:3001 \
 #     -e DATABASE_URL=... -e AUTH_SECRET=... -e ENCRYPTION_KEY=... \
-#     -e REDIS_URL=... -e NEXTAUTH_URL=https://your-domain.com \
+#     -e REDIS_URL=... -e AUTH_URL=https://your-domain.com \
 #     mailwave
 #
 # In Compose the `app` and `worker` services override the entrypoint with
@@ -44,7 +44,7 @@ COPY . .
 # Placeholder env vars needed at build time (Prisma config + Next build).
 # Real secrets are provided at runtime.
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public" \
-    NEXTAUTH_URL="http://localhost:3001" \
+    AUTH_URL="http://localhost:3001" \
     AUTH_SECRET="build-time-placeholder-not-used-at-runtime-32chars" \
     ENCRYPTION_KEY="build-time-placeholder-not-used-at-runtime-32chars"
 

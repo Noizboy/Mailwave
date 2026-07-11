@@ -39,7 +39,7 @@ Required variables:
 
 - `APP_DOMAIN`
   Example: `mailwave.example.com`
-- `NEXTAUTH_URL`
+- `AUTH_URL`
   Example: `https://mailwave.example.com`
 - `POSTGRES_PASSWORD`
   Use a strong password for PostgreSQL.
@@ -62,7 +62,7 @@ Optional variables:
 Notes:
 
 - `APP_DOMAIN` drives the public routing labels.
-- `NEXTAUTH_URL` must exactly match the final public URL.
+- `AUTH_URL` must exactly match the final public URL.
 - If `POSTGRES_USER` or `POSTGRES_DB` are omitted, the compose defaults are used.
 - `REDIS_URL` is already wired internally by default, so it usually does not need to be changed.
 
@@ -112,7 +112,7 @@ Check:
 
 Check:
 
-- `NEXTAUTH_URL` matches the public domain exactly
+- `AUTH_URL` matches the public domain exactly
 - `AUTH_SECRET` is present
 - `APP_DOMAIN` points to the same host you are opening
 

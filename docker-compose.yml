@@ -10,7 +10,7 @@ name: mailwave
 #
 # Required project env:
 #   APP_DOMAIN         Public host, e.g. mailwave.example.com
-#   NEXTAUTH_URL       Full public URL, e.g. https://mailwave.example.com
+#   AUTH_URL           Full public URL, e.g. https://mailwave.example.com
 #   POSTGRES_PASSWORD  Password for the bundled postgres service
 #   AUTH_SECRET        openssl rand -base64 32
 #   ENCRYPTION_KEY     openssl rand -hex 16 (32+ chars)
@@ -90,7 +90,7 @@ services:
     environment:
       DATABASE_URL: *database-url
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set in the Easypanel project env}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL must be set in the Easypanel project env}
+      AUTH_URL: ${AUTH_URL:?AUTH_URL must be set in the Easypanel project env}
       AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in the Easypanel project env}
       REDIS_URL: *redis-url

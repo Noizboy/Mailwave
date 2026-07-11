@@ -13,15 +13,10 @@ export async function GET() {
 
   const config = await prisma.aiConfig.findUnique({ where: { userId: session.user.id } });
   if (!config) return NextResponse.json(null);
-  if (config.provider === "codex") return NextResponse.json(null);
 
   return NextResponse.json({
     ...config,
     encryptedApiKey: config.encryptedApiKey ? "••••••••" : null,
-    oauthAccessToken: undefined,
-    oauthRefreshToken: undefined,
-    oauthConnected: undefined,
-    oauthExpiresAt: undefined,
   });
 }
 
@@ -65,20 +60,12 @@ export async function PUT(req: NextRequest) {
       ...rest,
       encryptedApiKey,
       baseUrl: baseUrl || null,
-      oauthAccessToken: null,
-      oauthRefreshToken: null,
-      oauthExpiresAt: null,
-      oauthConnected: false,
       status: "disconnected",
     },
     update: {
       ...rest,
       encryptedApiKey,
       baseUrl: baseUrl || null,
-      oauthAccessToken: null,
-      oauthRefreshToken: null,
-      oauthExpiresAt: null,
-      oauthConnected: false,
       status: updateStatus,
     },
   });

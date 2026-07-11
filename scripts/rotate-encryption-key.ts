@@ -3,11 +3,9 @@
  *
  * It decrypts every stored secret with OLD_ENCRYPTION_KEY (the previous key)
  * and re-encrypts it with the new ENCRYPTION_KEY (the current env value).
- * All four encrypted columns are covered:
+ * All encrypted columns are covered:
  *   - SmtpConfig.encryptedPassword
  *   - AiConfig.encryptedApiKey
- *   - AiConfig.oauthAccessToken
- *   - AiConfig.oauthRefreshToken
  *
  * Usage:
  *   1. Set NEW ENCRYPTION_KEY in .env (the new key, >= 32 chars, not a placeholder)
@@ -106,16 +104,14 @@ async function main() {
       }
     }
 
-    // AiConfig: encryptedApiKey, oauthAccessToken, oauthRefreshToken
+    // AiConfig: encryptedApiKey
     const aiConfigs = await prisma.aiConfig.findMany({
       where: {
         OR: [
           { encryptedApiKey: { not: null } },
-          { oauthAccessToken: { not: null } },
-          { oauthRefreshToken: { not: null } },
         ],
       },
-      select: { id: true, encryptedApiKey: true, oauthAccessToken: true, oauthRefreshToken: true },
+      select: { id: true, encryptedApiKey: true },
     });
     console.log(`→ AiConfig: ${aiConfigs.length} rows with at least one encrypted field.`);
 
@@ -126,8 +122,6 @@ async function main() {
 
       for (const [field, value] of [
         ["encryptedApiKey", c.encryptedApiKey],
-        ["oauthAccessToken", c.oauthAccessToken],
-        ["oauthRefreshToken", c.oauthRefreshToken],
       ] as const) {
         if (!value) continue;
         try {

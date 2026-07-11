@@ -83,10 +83,6 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
   }
 
   const providerName = aiConfig.provider as string;
-  if (providerName === "codex") {
-    await prisma.campaign.update({ where: { id: campaignId }, data: { status: "failed" } });
-    throw new Error("Codex integration is no longer supported");
-  }
 
   if (!aiConfig.encryptedApiKey) {
     await prisma.campaign.update({ where: { id: campaignId }, data: { status: "failed" } });

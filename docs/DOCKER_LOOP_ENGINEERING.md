@@ -167,7 +167,7 @@ Use this checklist as a loop-engineering queue. Each loop should:
   boot.
 - **Expected outcome:** A copy of `.env.example` with
   `DATABASE_URL=postgresql://mailwave:changeme@postgres:5432/mailwave?schema=public`,
-  `REDIS_URL=redis://redis:6379`, `NEXTAUTH_URL=http://localhost:3001`,
+  `REDIS_URL=redis://redis:6379`, `AUTH_URL=http://localhost:3001`,
   `PORT=3001`, and placeholder `AUTH_SECRET` / `ENCRYPTION_KEY` with comments
   pointing to `openssl rand -base64 32` and `openssl rand -hex 16`.
 - **Done when:** File exists and `docker compose --env-file .env.docker.example

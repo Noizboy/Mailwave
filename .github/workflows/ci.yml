@@ -54,7 +54,7 @@ jobs:
         run: npm run build
         env:
           # Next.js build reads these; values are placeholders, not secrets.
-          NEXTAUTH_URL: "http://localhost:3001"
+          AUTH_URL: "http://localhost:3001"
 
   audit:
     name: Dependency audit (high+)

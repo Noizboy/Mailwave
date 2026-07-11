@@ -8,7 +8,7 @@
 
 **Mailwave** es una aplicación SaaS self-hosted de **automatización de cold email** orientada a usuarios individuales (cuentas single-user, sin equipos ni multi-tenancy). Combina:
 
-- **Generación de emails personalizados con IA** (multi-proveedor: OpenAI, Anthropic, Google Gemini, OpenRouter, custom OpenAI-compatible, y Codex vía OAuth).
+- **Generación de emails personalizados con IA** (multi-proveedor: OpenAI, Anthropic, Google Gemini, OpenRouter, custom OpenAI-compatible).
 - **Workflow de revisión humana** (approve / reject / regenerate) antes del envío.
 - **Envío throttled por SMTP genérico** con rate limits diarios/horarios, intervalos entre envíos, y tracking de aperturas por pixel 1x1.
 - **Gestión de contactos y listas** con importación CSV (detección automática de columnas, validación y deduplicación).
@@ -31,7 +31,7 @@
 4. Enviar por SMTP propio con throttling configurable, sin exceder límites diarios/horarios ni un máximo de envíos por contacto.
 5. Medir aperturas mediante pixel de tracking y reportar tasa de entrega, de apertura y estado de cada email.
 6. Mantener notificaciones in-app sobre eventos relevantes (generación completada/fallida, envío completado/fallido, bounce).
-7. Mantener configuración segura de credenciales (SMTP, API keys, tokens OAuth) cifradas en reposo.
+7. Mantener configuración segura de credenciales (SMTP, API keys) cifradas en reposo.
 
 ### No-objetivos (explícitamente fuera de alcance actual)
 - Registro/autoregistro de usuarios (los usuarios se crean vía seed o por migración).
@@ -79,7 +79,7 @@ No hay otros roles. Toda la autorización se reduce a **owner-scoping por `userI
 ```
 
 - **Autenticación:** NextAuth v5, sesión JWT, provider Credentials, middleware en `proxy.ts`.
-- **Cifrado en reposo:** AES-256-GCM (`lib/crypto.ts`) para password SMTP, API keys IA y tokens OAuth Codex (usa `ENCRYPTION_KEY`).
+- **Cifrado en reposo:** AES-256-GCM (`lib/crypto.ts`) para password SMTP y API keys IA (usa `ENCRYPTION_KEY`).
 - **Background jobs:** 4 workers BullMQ; serial para envío (concurrency 1), concurrencia 2 para generación y supresión.
 - **Tracking:** pixel GET `/api/track/{emailId}` devuelve GIF 1x1 y registra evento `opened`.
 
@@ -163,8 +163,8 @@ Cada feature se etiqueta con **[EXISTE]** para indicar que ya está implementado
 
 | ID | Requisito | Detalle |
 |---|---|---|
-| AI-01 | **Multi-proveedor** [EXISTE] | `lib/ai.ts`: `openai`, `anthropic`, `google_gemini` (vía endpoint OpenAI-compatible), `openrouter` (OpenAI-compatible + headers `HTTP-Referer`/`X-Title`), `custom` (OpenAI-compatible), `codex` (OAuth con OpenAI). |
-| AI-02 | **Modelos por defecto** [EXISTE] | gpt-4o-mini, claude-haiku-4-5-20251001, gemini-1.5-flash, openai/gpt-4o-mini, gpt-4o-mini, gpt-4o (codex). |
+| AI-01 | **Multi-proveedor** [EXISTE] | `lib/ai.ts`: `openai`, `anthropic`, `google_gemini` (vía endpoint OpenAI-compatible), `openrouter` (OpenAI-compatible + headers `HTTP-Referer`/`X-Title`), `custom` (OpenAI-compatible). |
+| AI-02 | **Modelos por defecto** [EXISTE] | gpt-4o-mini, claude-haiku-4-5-20251001, gemini-1.5-flash, openai/gpt-4o-mini, gpt-4o-mini. |
 | AI-03 | **Construcción de prompt** [EXISTE] | `buildSystemPrompt` (goal/product/cta/tone/language/guía de longitud/anti-placeholder) + `buildUserPrompt` (campos del contacto + customFields). |
 | AI-04 | **Salida estructurada** [EXISTE] | JSON `{subject, body, personalizationNotes}`; se remueven fences markdown; fallback a texto crudo si falla el parse. |
 | AI-05 | **Guard anti-placeholder** [EXISTE] | Instrucción explícita de no usar `[Your Name]` u otros placeholders. |
@@ -172,8 +172,7 @@ Cada feature se etiqueta con **[EXISTE]** para indicar que ya está implementado
 | AI-07 | **Detección de errores de servicio** [EXISTE] | Timeouts, 401, 5xx, red → aborta temprano con `failed` + notificación. |
 | AI-08 | **Regeneración individual** [EXISTE] | Por email, con target subject/body. |
 | AI-09 | **Test de conexión IA** [EXISTE] | Genera un email de prueba; mapeo de errores a mensajes humanos. |
-| AI-10 | **Codex OAuth (PKCE)** [EXISTE] | `/api/settings/ai/codex/connect` (state+verifier cookie) → authorize OpenAI → `/codex/callback` intercambia código, cifra tokens. Refresh si quedan <5 min. Disconnect revoca en `auth.openai.com/oauth/revoke`. |
-| AI-11 | **Override por campaña** [EXISTE] | Cada campaña puede indicar `aiProvider`/`aiModel` distinto al default de la cuenta. |
+| AI-10 | **Override por campaña** [EXISTE] | Cada campaña puede indicar `aiProvider`/`aiModel` distinto al default de la cuenta. |
 
 ### 5.8 Envío de emails (SMTP)
 
@@ -184,7 +183,7 @@ Cada feature se etiqueta con **[EXISTE]** para indicar que ya está implementado
 | SND-03 | **Umbral por contacto** [EXISTE] | Si `emailsSentCount >= suppressAfterEmails` → skip + marca `skipped`. |
 | SND-04 | **Intervalos entre envíos** [EXISTE] | `fixed` o `random` entre `minInterval`/`maxInterval` (minutos). Actualiza `nextSendAt`. |
 | SND-05 | **Pausa-aware** [EXISTE] | Re-checkea estado de campaña en cada iteración; respeta `paused`. |
-| SND-06 | **Tracking pixel** [EXISTE] | Inyecta `<img src="{NEXTAUTH_URL}/api/track/{emailId}">` en el HTML. |
+| SND-06 | **Tracking pixel** [EXISTE] | Inyecta `<img src="{AUTH_URL}/api/track/{emailId}">` en el HTML. |
 | SND-07 | **Registro de eventos** [EXISTE] | `sent` y `failed` como `DeliveryEvent`. |
 | SND-08 | **Auto-supresión en envío** [EXISTE] | Incrementa `emailsSentCount`; si llega al umbral, cambia estado del contacto a `suppressed`. |
 | SND-09 | **Notificación de bounce** [EXISTE] | En fallo, crea notificación `delivery.email_bounced` rate-limited a 1/hora/campaña. |
@@ -226,7 +225,7 @@ Cada feature se etiqueta con **[EXISTE]** para indicar que ya está implementado
 |---|---|---|
 | SET-01 | **Account** [EXISTE] | Get/update nombre; cambio de contraseña (bcrypt cost 12). |
 | SET-02 | **Mail Server (SMTP)** [EXISTE] | host/port/username/password/fromName/fromEmail/replyTo/encryption (tls/ssl/none). Password enmascarado al leer; cifrado AES-256-GCM en reposo. "Test connection" (verify o envío de test, errores humanizados). Estado connected/disconnected/failed con `testedAt`. |
-| SET-03 | **AI Integration** [EXISTE] | Provider select (6 opciones), model, API key (enmascarada), baseUrl opcional. "Test connection" genera email de prueba. Botones Codex OAuth connect/disconnect. |
+| SET-03 | **AI Integration** [EXISTE] | Provider select (5 opciones), model, API key (enmascarada), baseUrl opcional. "Test connection" genera email de prueba. |
 | SET-04 | **Sending Limits** [EXISTE] | dailyLimit (1–100000), hourlyLimit (1–10000), suppressAfterEmails (1–1000). Cambiar el umbral encola job de supresión. |
 | SET-05 | **Notifications** [EXISTE] | Toggle `inApp` por tipo de evento. |
 
@@ -247,7 +246,7 @@ Cada feature se etiqueta con **[EXISTE]** para indicar que ya está implementado
 | Categoría | Requisito | Implementación actual |
 |---|---|---|
 | **Seguridad — Auth** | Sesión JWT firmada con `AUTH_SECRET`; provider Credentials con bcrypt cost 12. | NextAuth v5 en `lib/auth.ts`; middleware `proxy.ts`. |
-| **Seguridad — Cifrado en reposo** | Credenciales SMTP, API keys IA y tokens OAuth Codex cifrados con AES-256-GCM (IV + auth tag, base64). | `lib/crypto.ts` usando `ENCRYPTION_KEY` (≥32 chars). |
+| **Seguridad — Cifrado en reposo** | Credenciales SMTP y API keys IA cifradas con AES-256-GCM (IV + auth tag, base64). | `lib/crypto.ts` usando `ENCRYPTION_KEY` (≥32 chars). |
 | **Seguridad — Owner-scoping** | Toda lectura/escritura filtra por `userId`; no hay data cross-user posible por diseño de query. | Aplicado en cada API route. |
 | **Seguridad — Validación** | Toda entrada de API validada con zod (campaign, contact, SMTP, AI, sending-limits, notif prefs, password, import rows). | Schemas en cada route. |
 | **Privacidad** | No hay tracking de clicks ni PII enviada a terceros más allá del proveedor de IA elegido por el usuario. | Pixel solo registra apertura, sin cookies ni fingerprinting. |
@@ -265,7 +264,7 @@ Cada feature se etiqueta con **[EXISTE]** para indicar que ya está implementado
 Entidades principales (ver `prisma/schema.prisma` para el detalle completo):
 
 - **User** (1:1 SmtpConfig, AiConfig, SendingAccount; 1:N Campaign, Contact, Import, List, Notification, NotificationPreference)
-- **SmtpConfig**, **AiConfig** (con campos OAuth Codex), **SendingAccount** (`suppressAfterEmails`)
+- **SmtpConfig**, **AiConfig**, **SendingAccount** (`suppressAfterEmails`)
 - **Contact** (customFields JSON, `@@unique([userId, email])`, `emailsSentCount`)
 - **Import** + **ImportRow** (state machine, `columnMapping` JSON)
 - **List** + **ListMember** (join)
@@ -290,7 +289,7 @@ Grupos de endpoints (todos bajo `/api`, todos owner-scoped):
 - `import`, `import/[id]`, `import/[id]/rows`, `import/[id]/{save,cancel}`
 - `track/[emailId]`
 - `notifications`, `notifications/[id]`
-- `settings/{account,account/password,smtp,smtp/test,ai,ai/test,ai/codex/{connect,callback,disconnect},sending-limits,notification-preferences}`
+- `settings/{account,account/password,smtp,smtp/test,ai,ai/test,sending-limits,notification-preferences}`
 
 ---
 
@@ -327,7 +326,7 @@ Variables (ver `.env.example`):
 |---|---|
 | `DATABASE_URL` | URL de PostgreSQL para Prisma. |
 | `AUTH_SECRET` | Secreto de firma JWT de NextAuth. |
-| `NEXTAUTH_URL` | URL base pública (usada en pixel de tracking). |
+| `AUTH_URL` | URL base pública (usada en Auth.js y en pixel de tracking). |
 | `ENCRYPTION_KEY` | Clave AES-256-GCM (≥32 chars) para cifrar credenciales. |
 | `REDIS_URL` | URL de Redis para BullMQ. |
 
@@ -360,7 +359,7 @@ El sistema "tal cual está" cumple si:
 - ✅ Puede generar emails con IA (bulk o individual), revisarlos, editarlos, aprobarlos/rechazarlos.
 - ✅ Puede enviar por SMTP propio respetando límites diarios/horarios, intervalos y umbral por contacto.
 - ✅ Las aperturas se registran vía pixel y se reportan (dedup) en dashboard/reportes.
-- ✅ Las credenciales (SMTP, API keys, tokens OAuth) están cifradas en reposo y enmascaradas al leer.
+- ✅ Las credenciales (SMTP, API keys) están cifradas en reposo y enmascaradas al leer.
 - ✅ Las notificaciones in-app se generan en los eventos clave y se respetan las preferencias.
 - ✅ Los background jobs son resilientes (reintentos, backoff) y el shutdown es graceful.
 - ✅ Toda query está owner-scoped por `userId` (no hay fuga cross-user).

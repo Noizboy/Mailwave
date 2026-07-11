@@ -667,7 +667,6 @@ function AiProviderCards({
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            description="Connect via OpenAI OAuth — no API key needed"
           {AI_PROVIDERS.map((p) => (
             <ProviderCard
               key={p.value}

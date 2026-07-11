@@ -28,13 +28,6 @@ export async function POST() {
   const config = await prisma.aiConfig.findUnique({ where: { userId: session.user.id } });
   const providerName = config?.provider as string | undefined;
 
-  if (providerName === "codex") {
-    return NextResponse.json(
-      { error: "Codex integration is no longer supported. Choose an API-key provider in AI Integration." },
-      { status: 422 }
-    );
-  }
-
   if (!config || !config.encryptedApiKey) {
     return NextResponse.json({ error: "AI not configured" }, { status: 422 });
   }

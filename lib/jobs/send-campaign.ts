@@ -204,7 +204,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     }
 
     try {
-      const appUrl = process.env.NEXTAUTH_URL ?? "";
+      const appUrl = process.env.AUTH_URL ?? "";
       const htmlBody = (email.body ?? "").replace(/\n/g, "<br>");
       const pixelUrl = `${appUrl}/api/track/${email.id}?s=${signEmailId(email.id)}`;
 

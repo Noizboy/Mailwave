@@ -26,7 +26,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public" \
-    NEXTAUTH_URL="http://localhost:3001" \
+    AUTH_URL="http://localhost:3001" \
     AUTH_SECRET="build-time-placeholder-not-used-at-runtime-32chars" \
     ENCRYPTION_KEY="build-time-placeholder-not-used-at-runtime-32chars"
 
