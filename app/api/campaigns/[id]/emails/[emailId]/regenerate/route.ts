@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS, DEFAULT_MODELS } from "@/lib/ai";
+import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS } from "@/lib/ai";
 
 export const runtime = "nodejs";
 
@@ -44,13 +44,13 @@ export async function POST(
     where: { userId, status: "connected" },
     orderBy: { updatedAt: "desc" },
   });
-  if (!aiConfig || !aiConfig.encryptedApiKey) {
+  if (!aiConfig || !aiConfig.encryptedApiKey || !aiConfig.model) {
     return NextResponse.json({ error: "No connected AI config" }, { status: 400 });
   }
 
   const apiKey = decrypt(aiConfig.encryptedApiKey);
   const provider = aiConfig.provider as string;
-  const model = campaign.aiModel ?? DEFAULT_MODELS[provider] ?? "gpt-4o-mini";
+  const model = aiConfig.model;
   const baseUrl = aiConfig.baseUrl ?? PROVIDER_BASE_URLS[provider] ?? undefined;
 
   const systemPrompt = buildSystemPrompt({

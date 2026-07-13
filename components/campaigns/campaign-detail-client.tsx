@@ -621,7 +621,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     );
   }
 
-  const canGenerate = ["pending", "failed", "completed"].includes(campaign.status);
+  const canGenerate = ["pending", "failed"].includes(campaign.status);
   const canRetryGeneration = campaign.status === "pending_review" && campaign.failedCount > 0;
   const canRegenerate = ["pending_review", "ready_to_send"].includes(campaign.status) && campaign.failedCount === 0;
   const allReviewed =
@@ -634,7 +634,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const canSend = ["ready_to_send", "paused"].includes(campaign.status) || allReviewed;
   const canPause = campaign.status === "sending";
   const isGenerating = campaign.status === "generating";
-  const hasFailures = campaign.failedCount > 0 && ["sending", "paused", "completed"].includes(campaign.status);
+  const hasFailures = campaign.failedCount > 0 && ["sending", "paused"].includes(campaign.status);
   const isSending = ["sending", "paused"].includes(campaign.status);
 
   const FILTER_TABS = [
@@ -848,15 +848,17 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                 <span className="text-sm font-semibold text-foreground">Campaign Details</span>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={openEditDetails}
-                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <Pencil className="h-3 w-3" />
-                  Edit
-                </Button>
+                {campaign.status !== "completed" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={openEditDetails}
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Edit
+                  </Button>
+                )}
                 {detailsOpen ? (
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 ) : (
@@ -900,15 +902,17 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                 <span className="text-sm font-semibold text-foreground">AI Instructions</span>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={openEditAi}
-                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <Pencil className="h-3 w-3" />
-                  Edit
-                </Button>
+                {campaign.status !== "completed" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={openEditAi}
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Edit
+                  </Button>
+                )}
                 {aiOpen ? (
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 ) : (
@@ -960,15 +964,17 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                 <span className="text-sm font-semibold text-foreground">Sending Configuration</span>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={openEditSending}
-                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <Pencil className="h-3 w-3" />
-                  Edit
-                </Button>
+                {campaign.status !== "completed" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={openEditSending}
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Edit
+                  </Button>
+                )}
                 {sendingOpen ? (
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 ) : (
@@ -1235,7 +1241,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                     )}
 
                     {/* Actions */}
-                    {!editMode && selected.contact.status !== "suppressed" && !isSending && (
+                    {!editMode && selected.contact.status !== "suppressed" && !isSending && campaign.status !== "completed" && (
                       <div className="flex flex-wrap gap-2">
                         <Button variant="outline" size="sm" onClick={openEdit}>
                           <Edit3 className="h-4 w-4" />

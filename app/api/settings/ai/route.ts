@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest) {
   const existing = await prisma.aiConfig.findUnique({ where: { userId: session.user.id } });
   const encryptedApiKey = apiKey ? encrypt(apiKey) : existing?.encryptedApiKey ?? null;
 
-  const configChanged = apiKey || rest.provider !== existing?.provider;
+  const configChanged = apiKey || rest.provider !== existing?.provider || rest.model !== existing?.model;
   const updateStatus = configChanged ? "disconnected" : (existing?.status ?? "disconnected");
 
   await prisma.aiConfig.upsert({

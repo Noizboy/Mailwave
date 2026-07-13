@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Mail, Trash2, MoreHorizontal, Pencil, FilePen, Plus } from "lucide-react";
+import { Mail, Trash2, MoreHorizontal, Pencil, FilePen, Plus, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,6 +55,21 @@ interface CampaignRow {
   scheduledAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  // fields needed for duplication
+  goal: string | null;
+  product: string | null;
+  cta: string | null;
+  tone: string | null;
+  language: string;
+  emailLength: string;
+  systemPrompt: string | null;
+  intervalType: string;
+  minInterval: number;
+  maxInterval: number;
+  dailyLimit: number;
+  hourlyLimit: number;
+  aiProvider: string | null;
+  aiModel: string | null;
 }
 
 async function fetchCampaigns(): Promise<CampaignRow[]> {
@@ -74,6 +89,7 @@ export function CampaignsClient() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameName, setRenameName] = useState("");
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   const { data: campaigns = [], isLoading } = useQuery({
     queryKey: ["campaigns"],
@@ -129,6 +145,43 @@ export function CampaignsClient() {
     } else {
       const err = await res.json();
       toast.error("Rename failed", err.error ?? "Could not rename the campaign.");
+    }
+  };
+
+  const handleDuplicate = async (c: CampaignRow) => {
+    setDuplicatingId(c.id);
+    try {
+      const res = await fetch("/api/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `Copy of ${c.name}`,
+          listId: c.list.id,
+          goal: c.goal ?? undefined,
+          product: c.product ?? undefined,
+          cta: c.cta ?? undefined,
+          tone: c.tone ?? undefined,
+          language: c.language,
+          emailLength: c.emailLength,
+          systemPrompt: c.systemPrompt ?? "",
+          intervalType: c.intervalType,
+          minInterval: c.minInterval,
+          maxInterval: c.maxInterval,
+          dailyLimit: c.dailyLimit,
+          hourlyLimit: c.hourlyLimit,
+          aiProvider: c.aiProvider ?? undefined,
+          aiModel: c.aiModel ?? undefined,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Campaign duplicated", `"Copy of ${c.name}" has been created.`);
+        queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      } else {
+        const err = await res.json();
+        toast.error("Duplicate failed", err.error ?? "Could not duplicate the campaign.");
+      }
+    } finally {
+      setDuplicatingId(null);
     }
   };
 
@@ -323,6 +376,13 @@ export function CampaignsClient() {
                             >
                               <FilePen className="mr-2 h-3.5 w-3.5" />
                               Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDuplicate(c)}
+                              disabled={duplicatingId === c.id}
+                            >
+                              <Copy className="mr-2 h-3.5 w-3.5" />
+                              {duplicatingId === c.id ? "Duplicating…" : "Duplicate"}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem

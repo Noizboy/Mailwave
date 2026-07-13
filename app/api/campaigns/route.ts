@@ -20,6 +20,8 @@ const createSchema = z.object({
   intervalType: z.enum(["fixed", "random"]).default("random"),
   minInterval: z.number().int().min(1).default(3),
   maxInterval: z.number().int().min(1).default(8),
+  dailyLimit: z.number().int().min(1).default(100),
+  hourlyLimit: z.number().int().min(1).default(20),
   scheduledAt: z.string().optional().refine(
     (v) => !v || !isNaN(Date.parse(v)),
     { message: "Invalid date" }
