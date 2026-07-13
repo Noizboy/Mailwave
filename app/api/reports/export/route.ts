@@ -41,7 +41,18 @@ export async function GET(req: NextRequest) {
     ]),
   ];
 
-  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  // Neutralize spreadsheet formula injection: a cell beginning with = + - @
+  // (or a tab/CR that some parsers strip to reach those) is executed as a
+  // formula by Excel/Sheets. Prefix such values with a single quote so they're
+  // treated as literal text. Contact fields originate from imported CSVs, so
+  // they are untrusted input.
+  const sanitizeCell = (v: unknown): string => {
+    const s = String(v);
+    return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  };
+  const csv = rows
+    .map((r) => r.map((v) => `"${sanitizeCell(v).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
 
   const headers: Record<string, string> = {
     "Content-Type": "text/csv",

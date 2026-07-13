@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyEmailId } from "@/lib/track-sign";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 
 export const runtime = "nodejs";
 
@@ -25,11 +26,9 @@ function pixelResponse(): NextResponse {
 }
 
 function clientIp(req: NextRequest): string {
-  // Trusted proxy provides X-Forwarded-For. Fall back to a stable "unknown"
-  // so all un-proxied traffic shares a single bucket (dev/test only).
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  // Use the proxy-appended (right-most) X-Forwarded-For entry so a client can't
+  // spoof its IP to evade the per-IP quota or forge Apple-MPP/scanner IPs.
+  return getClientIp(req.headers);
 }
 
 // Security scanner UAs that prefetch images at delivery time, before any user

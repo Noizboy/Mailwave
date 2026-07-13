@@ -2,6 +2,7 @@ import { Worker, Job } from "bullmq";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
+import { assertSafeHost } from "@/lib/ssrf";
 import nodemailer from "nodemailer";
 import { QUEUE_NAMES, getSendQueue } from "./queue";
 import { getNotifPrefs } from "./notification-prefs";
@@ -72,6 +73,30 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     }
 
     throw new Error("SMTP not configured or not connected");
+  }
+
+  // Re-validate the SMTP host at send time (not just at save time) to close the
+  // DNS-rebinding / TOCTOU window: a host that resolved to a public IP when
+  // saved could later point at an internal/metadata address (CN-005, CWE-918).
+  const hostCheck = await assertSafeHost(smtpConfig.host ?? "");
+  if (!hostCheck.ok) {
+    await prisma.campaign.updateMany({
+      where: { id: campaignId, activeSendRunId: sendRunId },
+      data: { status: "failed", activeSendRunId: null, nextSendAt: null },
+    });
+    if (prefs.campaign_error) {
+      await prisma.notification.create({
+        data: {
+          userId,
+          type: "campaign.sending_failed",
+          title: "Campaign failed",
+          body: `Campaign "${campaign.name}" could not be sent — the SMTP host is not allowed.`,
+          entityType: "campaign",
+          entityId: campaignId,
+        },
+      });
+    }
+    throw new Error(`SMTP host rejected: ${hostCheck.reason ?? "unsafe host"}`);
   }
 
   const smtpPassword = decrypt(smtpConfig.encryptedPassword);
@@ -410,8 +435,8 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       data: {
         userId,
         type: "campaign.sending_complete",
-        title: "Campaign sent",
-        body: `${sentCount} email${sentCount !== 1 ? "s" : ""} sent for "${campaign.name}".${failCount > 0 ? ` ${failCount} failed.` : ""}`,
+        title: `"${campaign.name}" finished sending`,
+        body: `${sentCount} email${sentCount !== 1 ? "s" : ""} delivered successfully.${failCount > 0 ? ` ${failCount} failed.` : ""}`,
         entityType: "campaign",
         entityId: campaignId,
       },

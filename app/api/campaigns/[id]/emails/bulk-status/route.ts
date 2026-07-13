@@ -24,6 +24,15 @@ export async function POST(
   });
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Don't allow bulk approval changes while the worker is actively sending or
+  // after completion — it can race the send loop.
+  if (["sending", "completed"].includes(campaign.status)) {
+    return NextResponse.json(
+      { error: `Emails cannot be changed while the campaign is ${campaign.status}.` },
+      { status: 409 }
+    );
+  }
+
   const body = await req.json();
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

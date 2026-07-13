@@ -94,6 +94,8 @@ describe("api/contacts", () => {
 
     it("creates the contact with lowercased email and adds it to a list", async () => {
       mocked(prisma.contact.findFirst).mockResolvedValue(null as never);
+      // Ownership check for the supplied listId must find a list owned by the user.
+      mocked(prisma.list.findFirst).mockResolvedValue({ id: "list-1" } as never);
       mocked(prisma.contact.create).mockResolvedValue({ ...contact, id: "new-1" } as never);
       mocked(prisma.listMember.create).mockResolvedValue({} as never);
 
@@ -117,6 +119,23 @@ describe("api/contacts", () => {
       expect(prisma.listMember.create).toHaveBeenCalledWith({
         data: { listId: "list-1", contactId: "new-1" },
       });
+    });
+
+    it("returns 404 and does not add a membership when the listId is not owned by the user", async () => {
+      mocked(prisma.contact.findFirst).mockResolvedValue(null as never);
+      // list.findFirst scoped by userId finds nothing → not the caller's list.
+      mocked(prisma.list.findFirst).mockResolvedValue(null as never);
+
+      const res = await createContact(
+        jsonRequest("/api/contacts", {
+          method: "POST",
+          body: { email: "victim-list@example.com", listId: "someone-elses-list" },
+        })
+      );
+
+      expect(res.status).toBe(404);
+      expect(prisma.contact.create).not.toHaveBeenCalled();
+      expect(prisma.listMember.create).not.toHaveBeenCalled();
     });
   });
 

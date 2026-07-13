@@ -16,6 +16,12 @@ vi.mock("@/lib/crypto", () => ({
   decrypt: vi.fn(() => "decrypted-api-key"),
 }));
 
+// SSRF host validation is exercised in lib/ssrf.test.ts; stub it here so the
+// worker tests stay hermetic (no real DNS for a stored custom base URL).
+vi.mock("@/lib/ssrf", () => ({
+  assertSafeHost: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
 vi.mock("@/lib/ai", () => ({
   generateEmail: vi.fn(),
   buildSystemPrompt: vi.fn(() => "system prompt"),
@@ -50,7 +56,11 @@ const baseCampaign = {
   emailLength: "medium",
   aiProvider: null,
   aiModel: null,
-  status: "pending",
+  // The worker flips the campaign to "generating" before the per-contact loop,
+  // and the loop re-reads status each iteration to honor external cancellation
+  // (`if (fresh.status !== "generating") return`). The mocked findFirst must
+  // therefore report "generating" or the loop exits immediately.
+  status: "generating",
 };
 
 const aiConfig = {
@@ -120,13 +130,20 @@ describe("processGenerate", () => {
       member("c2", "c@d.com"),
     ] as never);
     mocked(generateEmail).mockResolvedValue(generation);
+    // Pin ai_email_ready off so the incidental "no notification" assertion below
+    // is independent of the default preference value.
+    mocked(prisma.notificationPreference.findMany).mockResolvedValue([
+      { eventType: "ai_email_ready", inApp: false },
+    ] as never);
 
     const result = await processGenerate(fakeJob());
 
     expect(result).toEqual({ successCount: 2, failCount: 0 });
     expect(prisma.campaignEmail.upsert).toHaveBeenCalledTimes(2);
-    expect(prisma.campaign.update).toHaveBeenLastCalledWith({
-      where: { id: "camp-1" },
+    // The worker finalizes with updateMany (guarded by status: "generating" so
+    // a concurrent cancel is a no-op rather than being overwritten).
+    expect(prisma.campaign.updateMany).toHaveBeenLastCalledWith({
+      where: { id: "camp-1", status: "generating" },
       data: {
         status: "pending_review",
         totalEmails: 2,
@@ -134,7 +151,7 @@ describe("processGenerate", () => {
         failedCount: 0,
       },
     });
-    // ai_email_ready defaults to false — notification skipped by default
+    // ai_email_ready pinned off above — completion notification is skipped.
     expect(prisma.notification.create).not.toHaveBeenCalled();
   });
 
@@ -156,7 +173,7 @@ describe("processGenerate", () => {
       })
     );
     // Batch still completes into review with the failure counted
-    expect(prisma.campaign.update).toHaveBeenLastCalledWith(
+    expect(prisma.campaign.updateMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ status: "pending_review", failedCount: 1 }),
       })
@@ -178,6 +195,9 @@ describe("processGenerate", () => {
   });
 
   it("fails the campaign and notifies when the list has no eligible contacts", async () => {
+    mocked(prisma.notificationPreference.findMany).mockResolvedValue([
+      { eventType: "ai_email_error", inApp: true },
+    ] as never);
     mocked(prisma.listMember.findMany).mockResolvedValue([] as never);
 
     const result = await processGenerate(fakeJob());
@@ -195,6 +215,9 @@ describe("processGenerate", () => {
   });
 
   it("aborts generation and notifies when the AI service is unreachable", async () => {
+    mocked(prisma.notificationPreference.findMany).mockResolvedValue([
+      { eventType: "ai_email_error", inApp: true },
+    ] as never);
     mocked(prisma.listMember.findMany).mockResolvedValue([
       member("c1", "a@b.com"),
       member("c2", "c@d.com"),

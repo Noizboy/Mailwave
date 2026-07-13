@@ -4,9 +4,11 @@ import { useSession, signOut } from "next-auth/react";
 import { Bell, LogOut, Settings, Menu, CheckCircle2, XCircle, Sparkles, Info } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { cn, formatDateTime } from "@/lib/utils";
 import { useSidebar } from "@/components/layout/sidebar-context";
+import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -61,6 +63,7 @@ const PAGE_NAMES: Record<string, string> = {
   review: "Review",
   add: "Add Contact",
   notifications: "Notifications",
+  documentation: "Documentation",
 };
 
 function getBreadcrumbs(pathname: string): string {
@@ -97,6 +100,9 @@ export function TopBar({ title, actions, hideTitleOnMobile }: TopBarProps) {
   const crumbs = getBreadcrumbs(pathname);
   const initials = getInitials(session?.user?.name, session?.user?.email);
 
+  const seenIds = useRef<Set<string>>(new Set());
+  const isFirstFetch = useRef(true);
+
   const { data: notifData } = useQuery({
     queryKey: ["notifications"],
     queryFn: async () => {
@@ -106,6 +112,25 @@ export function TopBar({ title, actions, hideTitleOnMobile }: TopBarProps) {
     },
     refetchInterval: 30000,
   });
+
+  useEffect(() => {
+    if (!notifData) return;
+    if (isFirstFetch.current) {
+      // Seed seen IDs on first load — don't toast existing notifications
+      notifData.notifications.forEach((n) => seenIds.current.add(n.id));
+      isFirstFetch.current = false;
+      return;
+    }
+    for (const n of notifData.notifications) {
+      if (seenIds.current.has(n.id)) continue;
+      seenIds.current.add(n.id);
+      if (n.type === "campaign.generation_complete") {
+        toast.success(n.title, n.body);
+      } else if (n.type === "campaign.sending_complete") {
+        toast.success(n.title, n.body);
+      }
+    }
+  }, [notifData]);
 
   const unreadCount = notifData?.unreadCount ?? 0;
   const notifications = notifData?.notifications ?? [];
@@ -202,14 +227,21 @@ export function TopBar({ title, actions, hideTitleOnMobile }: TopBarProps) {
                 </div>
               ) : (
                 <ul className="divide-y">
-                  {notifications.map((n) => (
+                  {notifications.map((n) => {
+                    const href = n.entityType === "campaign" && n.entityId
+                      ? `/campaigns/${n.entityId}`
+                      : null;
+                    return (
                     <li
                       key={n.id}
                       className={cn(
-                        "flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/60",
-                        !n.read && "bg-muted/40"
+                        "flex gap-3 px-4 py-3 transition-colors hover:bg-muted/60",
+                        !n.read && "bg-muted/40",
+                        href ? "cursor-pointer" : !n.read ? "cursor-pointer" : "cursor-default"
                       )}
-                      onClick={() => !n.read && markOneRead(n.id)}
+                      onClick={() => {
+                        if (!n.read) markOneRead(n.id);
+                      }}
                     >
                       <NotifIcon tone={getNotifTone(n.type)} notifType={n.type} />
                       <div className="min-w-0 flex-1">
@@ -219,7 +251,11 @@ export function TopBar({ title, actions, hideTitleOnMobile }: TopBarProps) {
                             !n.read ? "font-semibold" : "font-normal"
                           )}
                         >
-                          {n.title}
+                          {href ? (
+                            <Link href={href} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                              {n.title}
+                            </Link>
+                          ) : n.title}
                         </div>
                         <div className="mt-0.5 text-xs text-muted-foreground">
                           {n.body}
@@ -232,7 +268,7 @@ export function TopBar({ title, actions, hideTitleOnMobile }: TopBarProps) {
                         <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                       )}
                     </li>
-                  ))}
+                  )})}
                 </ul>
               )}
             </ScrollArea>

@@ -103,6 +103,16 @@ export async function POST(req: NextRequest) {
 
   const { listId, ...contactData } = parsed.data;
 
+  // If a listId is supplied, verify it belongs to this user before creating a
+  // membership — otherwise a caller could add a contact to another user's list.
+  if (listId) {
+    const owned = await prisma.list.findFirst({
+      where: { id: listId, userId: session.user.id },
+      select: { id: true },
+    });
+    if (!owned) return NextResponse.json({ error: "List not found" }, { status: 404 });
+  }
+
   const existing = await prisma.contact.findFirst({
     where: { userId: session.user.id, email: contactData.email.toLowerCase() },
   });

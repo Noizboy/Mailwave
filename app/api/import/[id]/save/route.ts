@@ -35,6 +35,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const columnMapping = (importRecord.columnMapping as Record<string, string>) || {};
 
   let resolvedListId: string | null = listId || null;
+  // Verify an explicitly-supplied listId belongs to this user before adding
+  // members to it — otherwise a caller could inject contacts into another
+  // user's list (IDOR).
+  if (resolvedListId) {
+    const owned = await prisma.list.findFirst({
+      where: { id: resolvedListId, userId },
+      select: { id: true },
+    });
+    if (!owned) return NextResponse.json({ error: "List not found" }, { status: 404 });
+  }
   if (createListName && !resolvedListId) {
     const list = await prisma.list.create({
       data: { userId: userId, name: createListName },

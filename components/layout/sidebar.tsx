@@ -10,6 +10,7 @@ import {
   Mail,
   BarChart3,
   Settings,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { useSidebar } from "@/components/layout/sidebar-context";
@@ -28,6 +29,7 @@ const navItems: NavItem[] = [
   { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/upload", label: "Upload CSV", icon: Upload },
   { href: "/reports", label: "Reports", icon: BarChart3 },
+  { href: "/documentation", label: "Documentation", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -86,7 +88,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       {/* Version + credits */}
       <div className="mt-auto flex flex-col items-center gap-0.5 pb-1 pt-4 text-center">
         <span className="text-[11px] text-white/30">
-          Version v1.1.2
+          Version v1.1.5
         </span>
         <span className="text-[11px] text-white/30">
           Created by Alejandro Pujols

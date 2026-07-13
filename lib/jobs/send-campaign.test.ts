@@ -11,6 +11,12 @@ vi.mock("node:crypto", async (importOriginal) => {
   };
 });
 
+// SSRF host validation is exercised in lib/ssrf.test.ts; stub it here so the
+// worker tests stay hermetic (no real DNS for the fake SMTP host).
+vi.mock("@/lib/ssrf", () => ({
+  assertSafeHost: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     campaign: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },

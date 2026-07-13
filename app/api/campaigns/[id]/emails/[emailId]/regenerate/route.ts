@@ -3,8 +3,16 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS } from "@/lib/ai";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { assertSafeHost } from "@/lib/ssrf";
 
 export const runtime = "nodejs";
+
+// Cap single-email regenerations at 10/min/user — this endpoint calls the AI
+// provider (spends credits) and previously had no limit, unlike the batch
+// generate endpoint (SEC-004).
+const REGEN_MAX = 10;
+const REGEN_WINDOW_MS = 60 * 1000;
 
 export async function POST(
   req: NextRequest,
@@ -14,6 +22,15 @@ export async function POST(
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const userId = session.user.id;
+
+  const rl = await checkRateLimit(`campaign-regenerate:${userId}`, REGEN_MAX, REGEN_WINDOW_MS);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: `Too many regeneration requests. Try again in ${rl.retryAfterSeconds}s.` },
+      { status: 429, headers: { RetryAfter: String(rl.retryAfterSeconds) } }
+    );
+  }
+
   const { id, emailId } = await params;
 
   const campaign = await prisma.campaign.findFirst({
@@ -52,6 +69,15 @@ export async function POST(
   const provider = aiConfig.provider as string;
   const model = aiConfig.model;
   const baseUrl = aiConfig.baseUrl ?? PROVIDER_BASE_URLS[provider] ?? undefined;
+
+  // Re-validate a user-supplied AI base URL before the outbound call (TOCTOU /
+  // DNS-rebinding — CN-005). Built-in provider URLs are trusted.
+  if (aiConfig.baseUrl) {
+    const hostCheck = await assertSafeHost(aiConfig.baseUrl);
+    if (!hostCheck.ok) {
+      return NextResponse.json({ error: hostCheck.reason ?? "AI base URL not allowed." }, { status: 400 });
+    }
+  }
 
   const systemPrompt = buildSystemPrompt({
     goal: campaign.goal,

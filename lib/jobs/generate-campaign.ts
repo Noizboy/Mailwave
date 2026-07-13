@@ -4,6 +4,7 @@ import { decrypt } from "@/lib/crypto";
 import { generateEmail, buildSystemPrompt, buildUserPrompt, PROVIDER_BASE_URLS, DEFAULT_MODELS, type AiProviderName } from "@/lib/ai";
 import { QUEUE_NAMES } from "./queue";
 import { getNotifPrefs } from "./notification-prefs";
+import { assertSafeHost } from "@/lib/ssrf";
 
 export interface GenerateCampaignJobData {
   campaignId: string;
@@ -92,6 +93,17 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
   const apiKey = decrypt(aiConfig.encryptedApiKey);
   const model = campaign.aiModel ?? aiConfig.model ?? DEFAULT_MODELS[provider] ?? "gpt-4o-mini";
   const baseUrl = aiConfig.baseUrl ?? PROVIDER_BASE_URLS[provider] ?? undefined;
+
+  // Re-validate a user-supplied AI base URL at generation time (not just at
+  // save time) to close the DNS-rebinding / TOCTOU window (CN-005, CWE-918).
+  // Built-in provider URLs (PROVIDER_BASE_URLS) are trusted and skip the check.
+  if (aiConfig.baseUrl) {
+    const hostCheck = await assertSafeHost(aiConfig.baseUrl);
+    if (!hostCheck.ok) {
+      await prisma.campaign.update({ where: { id: campaignId }, data: { status: "failed" } });
+      throw new Error(`AI base URL rejected: ${hostCheck.reason ?? "unsafe host"}`);
+    }
+  }
 
   const systemPrompt = buildSystemPrompt({
     goal: campaign.goal,
@@ -252,8 +264,8 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
       data: {
         userId,
         type: "campaign.generation_complete",
-        title: "Generation complete",
-        body: `${successCount} email${successCount !== 1 ? "s" : ""} generated for "${campaign.name}". Ready for review.`,
+        title: `"${campaign.name}" is ready for review`,
+        body: `${successCount} email${successCount !== 1 ? "s" : ""} generated successfully. Go review and approve them before sending.`,
         entityType: "campaign",
         entityId: campaignId,
       },

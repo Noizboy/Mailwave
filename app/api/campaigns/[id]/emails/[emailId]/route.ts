@@ -25,6 +25,15 @@ export async function PATCH(
   });
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Don't allow editing/approval changes while the worker is actively sending
+  // or after completion — it can race the send loop or mutate already-sent mail.
+  if (["sending", "completed"].includes(campaign.status)) {
+    return NextResponse.json(
+      { error: `Emails cannot be edited while the campaign is ${campaign.status}.` },
+      { status: 409 }
+    );
+  }
+
   const body = await req.json();
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
