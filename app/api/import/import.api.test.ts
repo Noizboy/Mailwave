@@ -136,7 +136,11 @@ describe("api/import", () => {
 
     it("saves only valid rows, maps custom fields, and marks the import saved", async () => {
       mocked(prisma.import.findFirst).mockResolvedValue(importRecord as never);
-      mocked(prisma.contact.upsert).mockResolvedValue({ id: "c-1" } as never);
+      // Batch approach: findMany (existing) → createMany → findMany (all ids)
+      mocked(prisma.contact.findMany)
+        .mockResolvedValueOnce([] as never)           // no existing contacts
+        .mockResolvedValueOnce([{ id: "c-1" }] as never); // contacts after creation
+      mocked(prisma.contact.createMany).mockResolvedValue({ count: 1 } as never);
       mocked(prisma.import.update).mockResolvedValue({} as never);
 
       const res = await saveImport(
@@ -147,16 +151,18 @@ describe("api/import", () => {
 
       expect(res.status).toBe(200);
       expect(body).toMatchObject({ savedCount: 1, skippedCount: 2 });
-      expect(prisma.contact.upsert).toHaveBeenCalledTimes(1);
-      expect(prisma.contact.upsert).toHaveBeenCalledWith(
+      expect(prisma.contact.createMany).toHaveBeenCalledTimes(1);
+      expect(prisma.contact.createMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          create: expect.objectContaining({
-            email: "good@x.com",
-            firstName: "Good",
-            customFields: { color: "blue" },
-            status: "subscribed",
-            importId: "imp-1",
-          }),
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              email: "good@x.com",
+              firstName: "Good",
+              customFields: { color: "blue" },
+              status: "subscribed",
+              importId: "imp-1",
+            }),
+          ]),
         })
       );
       expect(prisma.import.update).toHaveBeenCalledWith({
@@ -168,8 +174,11 @@ describe("api/import", () => {
     it("creates a new list and attaches saved contacts when createListName is given", async () => {
       mocked(prisma.import.findFirst).mockResolvedValue(importRecord as never);
       mocked(prisma.list.create).mockResolvedValue({ id: "list-9" } as never);
-      mocked(prisma.contact.upsert).mockResolvedValue({ id: "c-1" } as never);
-      mocked(prisma.listMember.upsert).mockResolvedValue({} as never);
+      mocked(prisma.contact.findMany)
+        .mockResolvedValueOnce([] as never)
+        .mockResolvedValueOnce([{ id: "c-1" }] as never);
+      mocked(prisma.contact.createMany).mockResolvedValue({ count: 1 } as never);
+      mocked(prisma.listMember.createMany).mockResolvedValue({ count: 1 } as never);
       mocked(prisma.import.update).mockResolvedValue({} as never);
 
       const res = await saveImport(
@@ -185,11 +194,10 @@ describe("api/import", () => {
       expect(prisma.list.create).toHaveBeenCalledWith({
         data: { userId: "user-1", name: "Imported July" },
       });
-      expect(prisma.listMember.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          create: { listId: "list-9", contactId: "c-1" },
-        })
-      );
+      expect(prisma.listMember.createMany).toHaveBeenCalledWith({
+        data: [{ listId: "list-9", contactId: "c-1" }],
+        skipDuplicates: true,
+      });
     });
   });
 

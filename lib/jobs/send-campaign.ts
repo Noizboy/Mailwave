@@ -114,6 +114,19 @@ export async function processSend(job: Job<SendCampaignJobData>) {
   // the UI doesn't show a spurious "Resume Sending" button between sends.
   let reEnqueuedContinuation = false;
 
+  // Read rate-limit counts once before the loop and track them locally.
+  // Each job sends at most one email before re-enqueueing, so the counts stay
+  // accurate across the single send performed this run.
+  const now0 = new Date();
+  const hourAgo0 = new Date(now0.getTime() - 3600000);
+  const dayAgo0 = new Date(now0.getTime() - 86400000);
+  let sentLastHour = await prisma.deliveryEvent.count({
+    where: { campaignEmail: { campaign: { userId } }, eventType: "sent", occurredAt: { gte: hourAgo0 } },
+  });
+  let sentLastDay = await prisma.deliveryEvent.count({
+    where: { campaignEmail: { campaign: { userId } }, eventType: "sent", occurredAt: { gte: dayAgo0 } },
+  });
+
   for (let index = 0; index < pendingEmails.length; index++) {
     const email = pendingEmails[index];
     // Re-check campaign status in case it was paused
@@ -140,26 +153,6 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       break;
     }
 
-    // Check daily/hourly limits
-    const now = new Date();
-    const hourAgo = new Date(now.getTime() - 3600000);
-    const dayAgo = new Date(now.getTime() - 86400000);
-
-    const sentLastHour = await prisma.deliveryEvent.count({
-      where: {
-        campaignEmail: { campaign: { userId } },
-        eventType: "sent",
-        occurredAt: { gte: hourAgo },
-      },
-    });
-    const sentLastDay = await prisma.deliveryEvent.count({
-      where: {
-        campaignEmail: { campaign: { userId } },
-        eventType: "sent",
-        occurredAt: { gte: dayAgo },
-      },
-    });
-
     if (sentLastHour >= smtpConfig.hourlyLimit || sentLastDay >= smtpConfig.dailyLimit) {
       // Compute when each exceeded limit clears (oldest event in window + window size)
       const resumeTimes: number[] = [];
@@ -169,7 +162,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
           where: {
             campaignEmail: { campaign: { userId } },
             eventType: "sent",
-            occurredAt: { gte: hourAgo },
+            occurredAt: { gte: hourAgo0 },
           },
           orderBy: { occurredAt: "asc" },
         });
@@ -181,7 +174,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
           where: {
             campaignEmail: { campaign: { userId } },
             eventType: "sent",
-            occurredAt: { gte: dayAgo },
+            occurredAt: { gte: dayAgo0 },
           },
           orderBy: { occurredAt: "asc" },
         });
@@ -277,6 +270,8 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       });
 
       sentCount++;
+      sentLastHour++;
+      sentLastDay++;
 
       await prisma.campaign.update({
         where: { id: campaignId },

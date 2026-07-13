@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const campaignId = url.searchParams.get("campaignId");
 
+  const EXPORT_LIMIT = 10_000;
   const emails = await prisma.campaignEmail.findMany({
     where: {
       ...(campaignId ? { campaignId } : {}),
@@ -21,7 +22,9 @@ export async function GET(req: NextRequest) {
       campaign: { select: { name: true } },
     },
     orderBy: { sentAt: "desc" },
+    take: EXPORT_LIMIT,
   });
+  const truncated = emails.length === EXPORT_LIMIT;
 
   const rows = [
     ["Campaign", "First Name", "Last Name", "Email", "Company", "Subject", "Approval", "Status", "Sent At"],
@@ -40,10 +43,11 @@ export async function GET(req: NextRequest) {
 
   const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
 
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv",
-      "Content-Disposition": `attachment; filename="mailwave-export.csv"`,
-    },
-  });
+  const headers: Record<string, string> = {
+    "Content-Type": "text/csv",
+    "Content-Disposition": `attachment; filename="mailwave-export.csv"`,
+  };
+  if (truncated) headers["X-Truncated"] = "true";
+
+  return new NextResponse(csv, { headers });
 }

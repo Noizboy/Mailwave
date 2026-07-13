@@ -48,9 +48,6 @@ function memoryMarkBlock(key: string, blockMs: number): void {
   memoryStore.set(key, { failures: MAX_FAILURES, blockedUntil: Date.now() + blockMs });
 }
 
-function memoryMarkBlockPermanent(key: string): void {
-  memoryStore.set(key, { failures: MAX_FAILURES, blockedUntil: Infinity });
-}
 
 // ---- Redis backend --------------------------------------------------------
 let redisClient: Redis | null = null;
@@ -154,24 +151,6 @@ export async function markBlock(key: string, blockMs: number): Promise<void> {
   }
 }
 
-/**
- * Permanently blocks `key` with no expiry. Used by the tracking pixel so that
- * once an open event is recorded for an email it is never recorded again
- * (CN-002). Avoids the overhead of a TTL that would need to be large enough
- * to outlive any campaign lifetime.
- */
-export async function markBlockPermanent(key: string): Promise<void> {
-  const redis = await getRedis();
-  if (!redis) {
-    memoryMarkBlockPermanent(key);
-    return;
-  }
-  try {
-    await redis.set(`${BLOCK_PREFIX}${key}`, "1");
-  } catch {
-    memoryMarkBlockPermanent(key);
-  }
-}
 
 // ---- Fixed-window rate limiting (max N requests per window) ----------------
 //

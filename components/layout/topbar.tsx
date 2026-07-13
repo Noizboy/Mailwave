@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn, formatDateTime } from "@/lib/utils";
-import { useSidebar } from "@/lib/sidebar-context";
+import { useSidebar } from "@/components/layout/sidebar-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {

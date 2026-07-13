@@ -107,6 +107,8 @@ model Import {
   contacts       Contact[]
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   rows           ImportRow[]
+
+  @@index([userId])
 }
 
 model ImportRow {
@@ -130,6 +132,8 @@ model List {
   campaigns Campaign[]
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   members   ListMember[]
+
+  @@index([userId])
 }
 
 model ListMember {
@@ -146,6 +150,7 @@ model ListMember {
 model Campaign {
   id              String          @id @default(cuid())
   userId          String
+
   name            String
   listId          String
   goal            String?
@@ -178,6 +183,8 @@ model Campaign {
   list            List            @relation(fields: [listId], references: [id])
   user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   emails          CampaignEmail[]
+
+  @@index([userId])
 }
 
 model CampaignEmail {

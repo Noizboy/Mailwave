@@ -45,7 +45,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 const patchSchema = z.object({
   name: z.string().min(1).optional(),
   listId: z.string().min(1).optional(),
-  status: z.enum(["pending", "generating", "pending_review", "ready_to_send", "sending", "paused", "completed", "failed"]).optional(),
+  // Only allow statuses a user can set manually; sending/completed/failed/generating
+  // are owned by the worker and must never be set directly via the API.
+  status: z.enum(["pending", "pending_review", "ready_to_send", "paused"]).optional(),
   goal: z.string().optional(),
   product: z.string().optional(),
   cta: z.string().optional(),

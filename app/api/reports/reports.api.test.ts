@@ -57,7 +57,8 @@ describe("api/dashboard + reports + notifications", () => {
         .mockResolvedValueOnce(90 as never)
         .mockResolvedValueOnce(10 as never);
       mocked(prisma.campaign.findMany).mockResolvedValue([] as never);
-      mocked(prisma.deliveryEvent.groupBy).mockResolvedValue([] as never);
+      // openedEvents query now targets campaignEmail, not deliveryEvent
+      mocked(prisma.campaignEmail.findMany).mockResolvedValue([] as never);
 
       const res = await getReports();
       const body = await res.json();
@@ -73,7 +74,7 @@ describe("api/dashboard + reports + notifications", () => {
         .mockResolvedValueOnce(0 as never)
         .mockResolvedValueOnce(0 as never);
       mocked(prisma.campaign.findMany).mockResolvedValue([] as never);
-      mocked(prisma.deliveryEvent.groupBy).mockResolvedValue([] as never);
+      mocked(prisma.campaignEmail.findMany).mockResolvedValue([] as never);
 
       const res = await getReports();
       expect((await res.json()).summary.deliveryRate).toBe(0);

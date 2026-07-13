@@ -6,7 +6,7 @@ vi.mock("@/lib/prisma", () => ({
     campaign: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     listMember: { findMany: vi.fn() },
     aiConfig: { findFirst: vi.fn() },
-    campaignEmail: { findUnique: vi.fn(), upsert: vi.fn() },
+    campaignEmail: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn() },
     notification: { create: vi.fn() },
     notificationPreference: { findMany: vi.fn() },
   },
@@ -89,7 +89,8 @@ describe("processGenerate", () => {
     mocked(prisma.campaign.findFirst).mockResolvedValue(baseCampaign as never);
     mocked(prisma.campaign.update).mockResolvedValue({} as never);
     mocked(prisma.aiConfig.findFirst).mockResolvedValue(aiConfig as never);
-    mocked(prisma.campaignEmail.findUnique).mockResolvedValue(null as never);
+    // Default: no existing emails for this campaign
+    mocked(prisma.campaignEmail.findMany).mockResolvedValue([] as never);
     mocked(prisma.campaignEmail.upsert).mockResolvedValue({} as never);
     mocked(prisma.campaign.updateMany).mockResolvedValue({ count: 0 } as never);
     mocked(prisma.notification.create).mockResolvedValue({} as never);
@@ -164,7 +165,10 @@ describe("processGenerate", () => {
 
   it("skips contacts whose email was already generated", async () => {
     mocked(prisma.listMember.findMany).mockResolvedValue([member("c1", "a@b.com")] as never);
-    mocked(prisma.campaignEmail.findUnique).mockResolvedValue({ status: "generated" } as never);
+    // Pre-fetch returns an existing generated email for c1
+    mocked(prisma.campaignEmail.findMany).mockResolvedValue([
+      { contactId: "c1", status: "generated", approvalStatus: "pending" },
+    ] as never);
 
     const result = await processGenerate(fakeJob());
 

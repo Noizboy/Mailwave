@@ -1,5 +1,5 @@
 import { Sidebar, MobileSidebar } from "@/components/layout/sidebar";
-import { SidebarProvider } from "@/lib/sidebar-context";
+import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { requireSession } from "@/lib/session";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

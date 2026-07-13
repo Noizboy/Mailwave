@@ -103,6 +103,13 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
     basePrompt: campaign.systemPrompt,
   });
 
+  // Pre-fetch all existing emails for this campaign to avoid N+1 lookups in the loop.
+  const existingEmails = await prisma.campaignEmail.findMany({
+    where: { campaignId },
+    select: { contactId: true, status: true, approvalStatus: true },
+  });
+  const existingByContact = new Map(existingEmails.map((e) => [e.contactId, e]));
+
   let successCount = 0;
   let failCount = 0;
 
@@ -110,9 +117,7 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
     const { contact } = member;
 
     // Skip if already generated or deliberately skipped by the user
-    const existing = await prisma.campaignEmail.findUnique({
-      where: { campaignId_contactId: { campaignId, contactId: contact.id } },
-    });
+    const existing = existingByContact.get(contact.id);
     if (existing && (existing.status !== "pending" || existing.approvalStatus === "skipped")) continue;
 
     try {

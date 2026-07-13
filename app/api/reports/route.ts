@@ -47,13 +47,26 @@ export async function GET() {
       orderBy: { updatedAt: "desc" },
       take: 20,
     }),
-    // Fetch opened events with the email's sentAt so we can apply the same
-    // 15-second scanner-filter used in the per-email view (CN-002).
-    prisma.deliveryEvent.findMany({
-      where: { eventType: "opened", campaignEmail: { campaign: { userId } } },
+    // Fetch only sent emails that have at least one opened event, then include
+    // just the first event per email for the 15-second scanner filter (CN-002).
+    // This avoids loading every DeliveryEvent row for large accounts.
+    prisma.campaignEmail.findMany({
+      where: {
+        campaign: { userId },
+        status: "sent",
+        sentAt: { not: null },
+        deliveryEvents: { some: { eventType: "opened" } },
+      },
       select: {
-        occurredAt: true,
-        campaignEmail: { select: { id: true, campaignId: true, sentAt: true } },
+        id: true,
+        campaignId: true,
+        sentAt: true,
+        deliveryEvents: {
+          where: { eventType: "opened" },
+          select: { occurredAt: true },
+          orderBy: { occurredAt: "asc" },
+          take: 1,
+        },
       },
     }),
   ]);
@@ -62,25 +75,24 @@ export async function GET() {
   const failed = totalFailed;
   const deliveryRate = sent + failed > 0 ? Math.round((sent / (sent + failed)) * 100) : 0;
 
-  // Deduplicated open counts: one open per email, scanner events filtered out.
-  // An event counts as a genuine open only when it arrived >= 15 s after sentAt.
+  // Count genuine opens: first event per email must be >= 15 s after sentAt (CN-002).
+  // openedEvents is now a list of CampaignEmail rows (one per email) each carrying
+  // only their first opened DeliveryEvent, so no dedup loop is needed.
   const OPEN_THRESHOLD_MS = 15_000;
-  const openedEmailIdSet = new Set<string>();
   const openCountByCampaign: Record<string, number> = {};
 
-  for (const ev of openedEvents) {
-    const { sentAt, id: emailId, campaignId } = ev.campaignEmail;
+  for (const email of openedEvents) {
+    const firstEvent = email.deliveryEvents[0];
     if (
-      sentAt != null &&
-      ev.occurredAt.getTime() - sentAt.getTime() >= OPEN_THRESHOLD_MS &&
-      !openedEmailIdSet.has(emailId)
+      email.sentAt != null &&
+      firstEvent != null &&
+      firstEvent.occurredAt.getTime() - email.sentAt.getTime() >= OPEN_THRESHOLD_MS
     ) {
-      openedEmailIdSet.add(emailId);
-      openCountByCampaign[campaignId] = (openCountByCampaign[campaignId] ?? 0) + 1;
+      openCountByCampaign[email.campaignId] = (openCountByCampaign[email.campaignId] ?? 0) + 1;
     }
   }
 
-  const totalOpened = openedEmailIdSet.size;
+  const totalOpened = Object.values(openCountByCampaign).reduce((a, b) => a + b, 0);
   const openRate = sent > 0 ? Math.round((totalOpened / sent) * 100) : 0;
 
   const campaigns = campaignBreakdown.map(({ emails, ...campaign }) => ({

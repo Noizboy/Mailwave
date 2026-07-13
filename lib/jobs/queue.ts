@@ -15,6 +15,7 @@ function redisOptions() {
 let generateQueue: Queue | null = null;
 let sendQueue: Queue | null = null;
 let suppressContactsQueue: Queue | null = null;
+let dailyDigestQueue: Queue | null = null;
 
 export function getGenerateQueue(): Queue {
   if (!generateQueue) {
@@ -35,4 +36,11 @@ export function getSuppressContactsQueue(): Queue {
     suppressContactsQueue = new Queue(QUEUE_NAMES.suppressContacts, { connection: redisOptions() });
   }
   return suppressContactsQueue;
+}
+
+export function getDailyDigestQueue(): Queue {
+  if (!dailyDigestQueue) {
+    dailyDigestQueue = new Queue(QUEUE_NAMES.dailyDigest, { connection: redisOptions() });
+  }
+  return dailyDigestQueue;
 }

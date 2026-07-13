@@ -12,7 +12,7 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
-import { useSidebar } from "@/lib/sidebar-context";
+import { useSidebar } from "@/components/layout/sidebar-context";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
