@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyEmailId } from "@/lib/track-sign";
-import { isBlocked, markBlockPermanent, checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -33,10 +33,9 @@ function clientIp(req: NextRequest): string {
 }
 
 // Known email provider image proxies and security scanners that prefetch images
-// before the user opens the email. Requests from these must not count as opens.
-// Apple Mail Privacy Protection cannot be detected this way (it spoofs a normal
-// Safari User-Agent), so it is not listed here — the sentAt time check below
-// catches that case.
+// before the user opens the email. Requests from these are dropped so they never
+// reach the DB. Events that slip through unknown proxies are filtered at query
+// time in the emails API using the sentAt → occurredAt delta (CN-002).
 const EMAIL_PROXY_UA = [
   "GoogleImageProxy",
   "YahooMailProxy",
@@ -46,11 +45,28 @@ const EMAIL_PROXY_UA = [
   "Barracuda",               // Barracuda Sentinel
   "Mimecast",                // Mimecast email security
   "proton-go-http-client",   // ProtonMail proxy
+  "IronPort",                // Cisco IronPort / Cisco Email Security
+  "Sophos",                  // Sophos email gateway
+  "Forcepoint",              // Forcepoint email security
+  "Abnormal",                // Abnormal Security
+  "AppRiver",                // AppRiver email security
+  "Cloudflare-Email",        // Cloudflare Email Security scanner
 ];
 
-function isKnownEmailProxy(req: NextRequest): boolean {
-  const ua = req.headers.get("user-agent") ?? "";
-  return EMAIL_PROXY_UA.some((proxy) => ua.includes(proxy));
+// Apple Mail Privacy Protection (iOS 15+, macOS 12+) prefetches ALL images
+// through Apple relay servers before the user opens the email. Apple owns the
+// entire 17.0.0.0/8 block and uses it exclusively for this proxy — blocking
+// this subnet prevents false opens from Apple Mail users (CN-003).
+const APPLE_MPP_OCTET = 17;
+
+function isAppleMppIp(ip: string): boolean {
+  return parseInt(ip.split(".")[0], 10) === APPLE_MPP_OCTET;
+}
+
+function isKnownEmailProxy(ua: string, ip: string): boolean {
+  if (EMAIL_PROXY_UA.some((proxy) => ua.includes(proxy))) return true;
+  if (isAppleMppIp(ip)) return true;
+  return false;
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ emailId: string }> }) {
@@ -63,48 +79,41 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
     return pixelResponse();
   }
 
-  // SEC-005: per-IP rate limit. When exceeded, still return the pixel but
-  // skip recording the `opened` event so email clients keep rendering.
+  const ip = clientIp(req);
+  const ua = req.headers.get("user-agent") ?? "";
 
-  // Known email proxy prefetch — Gmail and Yahoo fetch images before the user
-  // opens the email. Never count these as real opens.
-  if (isKnownEmailProxy(req)) {
+  // Known proxy prefetch — drop before touching the DB or consuming IP quota.
+  if (isKnownEmailProxy(ua, ip)) {
     return pixelResponse();
   }
 
-  // One open event per email, ever. Additional pixel loads are ignored and do
-  // NOT consume the IP quota — only fresh opens do.
-  const key = `track:${emailId}`;
-  if ((await isBlocked(key)).blocked) {
-    return pixelResponse();
-  }
-
-  // This request would record an open — charge it to the IP quota.
-  const ipRl = await checkRateLimit(`track:${clientIp(req)}`, TRACK_IP_MAX, TRACK_IP_WINDOW_MS);
+  // SEC-005: per-IP rate limit to stop bulk scraping / metric inflation.
+  const ipRl = await checkRateLimit(`track:${ip}`, TRACK_IP_MAX, TRACK_IP_WINDOW_MS);
   if (!ipRl.allowed) {
-    // Silently drop the open event but keep serving the pixel.
+    return pixelResponse();
+  }
+
+  // CN-003: per-(emailId, IP) dedup — one event per IP per email per 60 s.
+  // Prevents multi-node proxy deployments (e.g. Proofpoint Enterprise, Mimecast
+  // cluster) from registering multiple events when they scan from different IPs.
+  const emailIpRl = await checkRateLimit(`track:email:${emailId}:${ip}`, 1, 60_000);
+  if (!emailIpRl.allowed) {
     return pixelResponse();
   }
 
   try {
     const email = await prisma.campaignEmail.findUnique({
       where: { id: emailId },
-      select: { id: true, status: true, sentAt: true },
+      select: { id: true, status: true },
     });
     if (email?.status === "sent") {
-      // Ignore opens that arrive within 5 seconds of sentAt. SMTP-level security
-      // scanners and some mail proxies (including Apple MPP on fast connections)
-      // fetch tracking pixels the moment an email is accepted by the server,
-      // producing false opens. Legitimate human opens require the email to be
-      // delivered, a notification to appear, and the user to tap/click — that
-      // takes at minimum several seconds after sentAt.
-      if (email.sentAt && Date.now() - email.sentAt.getTime() < 15_000) {
-        return pixelResponse();
-      }
       await prisma.deliveryEvent.create({
-        data: { campaignEmailId: emailId, eventType: "opened" },
+        data: {
+          campaignEmailId: emailId,
+          eventType: "opened",
+          metadata: { ip, ua: ua || null },
+        },
       });
-      await markBlockPermanent(key);
     }
   } catch {
     // Never fail — always return the pixel
