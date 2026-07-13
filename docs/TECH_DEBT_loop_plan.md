@@ -1,4 +1,4 @@
-# Technical Debt — Loop Engineering Tasks
+﻿# Technical Debt â€” Loop Engineering Tasks
 
 Use this checklist as a loop-engineering queue. Each loop should:
 
@@ -12,15 +12,15 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ## Tasks
 
-### TD-H1. N+1 en el send loop — mover counts de hourly/daily fuera del for
+### TD-H1. N+1 en el send loop â€” mover counts de hourly/daily fuera del for
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** High
 - **Depends on:** None
 - **Files to touch:** `lib/jobs/send-campaign.ts`
 - **Problem:** `prisma.deliveryEvent.count` (hourly) y `prisma.deliveryEvent.count` (daily) se ejecutan dentro del `for` loop por cada email. 1000 destinatarios = 2000 queries de count adicionales por run.
 - **Expected outcome:** Ambos counts se sacan antes del loop; se mantiene un contador local que se incrementa tras cada send exitoso.
-- **Done when:** `typecheck` pasa; el loop solo hace los 2 counts una vez al inicio del run (y una vez más si se re-enqueue).
+- **Done when:** `typecheck` pasa; el loop solo hace los 2 counts una vez al inicio del run (y una vez mÃ¡s si se re-enqueue).
 - **Verification:**
   ```bash
   npm run typecheck
@@ -31,12 +31,12 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ### TD-H2. Unbounded findMany en export CSV
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** High
 - **Depends on:** None
 - **Files to touch:** `app/api/reports/export/route.ts`
-- **Problem:** `findMany` sin `take` — una cuenta con 100k emails carga todo en memoria.
-- **Expected outcome:** Hard cap de 10 000 filas; si hay más, se incluye un header `X-Truncated: true` y la última fila del CSV indica el truncamiento.
+- **Problem:** `findMany` sin `take` â€” una cuenta con 100k emails carga todo en memoria.
+- **Expected outcome:** Hard cap de 10 000 filas; si hay mÃ¡s, se incluye un header `X-Truncated: true` y la Ãºltima fila del CSV indica el truncamiento.
 - **Done when:** `typecheck` pasa; el query tiene `take: 10_000`.
 - **Verification:**
   ```bash
@@ -47,12 +47,12 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ### TD-H3. Unbounded deliveryEvent.findMany en reports
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** High
 - **Depends on:** None
 - **Files to touch:** `app/api/reports/route.ts`
-- **Problem:** `deliveryEvent.findMany` sin límite carga todos los eventos de aperturas globalmente para calcular el open rate.
-- **Expected outcome:** Reemplazar el fetch de eventos por un query a nivel de `CampaignEmail` que traiga solo los que tienen al menos un evento `opened` válido (con `deliveryEvents: { some: ... }`), más el primer evento por email para el filtro de 15s. Esto elimina el unbounded fetch.
+- **Problem:** `deliveryEvent.findMany` sin lÃ­mite carga todos los eventos de aperturas globalmente para calcular el open rate.
+- **Expected outcome:** Reemplazar el fetch de eventos por un query a nivel de `CampaignEmail` que traiga solo los que tienen al menos un evento `opened` vÃ¡lido (con `deliveryEvents: { some: ... }`), mÃ¡s el primer evento por email para el filtro de 15s. Esto elimina el unbounded fetch.
 - **Done when:** `typecheck` pasa; no hay `deliveryEvent.findMany` en el reports route.
 - **Verification:**
   ```bash
@@ -61,14 +61,14 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ---
 
-### TD-H4. N+1 en import/save — reemplazar upsert-por-fila con batch
+### TD-H4. N+1 en import/save â€” reemplazar upsert-por-fila con batch
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** High
 - **Depends on:** None
 - **Files to touch:** `app/api/import/[id]/save/route.ts`
-- **Problem:** `contact.upsert` + `listMember.upsert` por fila en un `for` loop. 10k contactos → 20k queries.
-- **Expected outcome:** 4 queries totales: (1) findMany contacts existentes por email, (2) createMany contacts nuevos, (3) findMany contacts para obtener IDs, (4) createMany listMembers. Misma semántica de skip en duplicados/inválidos.
+- **Problem:** `contact.upsert` + `listMember.upsert` por fila en un `for` loop. 10k contactos â†’ 20k queries.
+- **Expected outcome:** 4 queries totales: (1) findMany contacts existentes por email, (2) createMany contacts nuevos, (3) findMany contacts para obtener IDs, (4) createMany listMembers. Misma semÃ¡ntica de skip en duplicados/invÃ¡lidos.
 - **Done when:** `typecheck` pasa; no hay upserts dentro de un loop.
 - **Verification:**
   ```bash
@@ -78,13 +78,13 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ---
 
-### TD-H5. Status gate mismatch — send route acepta pending_review pero worker lo rechaza
+### TD-H5. Status gate mismatch â€” send route acepta pending_review pero worker lo rechaza
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** High
 - **Depends on:** None
 - **Files to touch:** `app/api/campaigns/[id]/send/route.ts`
-- **Problem:** El route permite `pending_review`, pero el worker solo acepta `ready_to_send | paused | sending` y devuelve `{ skipped: true }` silenciosamente. El usuario obtiene un 200 con `status: "queued"` pero el email nunca se envía.
+- **Problem:** El route permite `pending_review`, pero el worker solo acepta `ready_to_send | paused | sending` y devuelve `{ skipped: true }` silenciosamente. El usuario obtiene un 200 con `status: "queued"` pero el email nunca se envÃ­a.
 - **Expected outcome:** Eliminar `pending_review` de los statuses permitidos en el route. El route devuelve 409 claro para ese estado.
 - **Done when:** `typecheck` pasa; la lista de statuses aceptados coincide exactamente con los del worker.
 - **Verification:**
@@ -96,12 +96,12 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ### TD-M1. Unsafe enum casts en query params de emails route
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** Medium
 - **Depends on:** None
 - **Files to touch:** `app/api/campaigns/[id]/emails/route.ts`
-- **Problem:** `approvalStatus` y `status` se castean con `as "pending" | ...` sin validación. Un valor inválido produce un error de runtime de Prisma en vez de un 400 limpio.
-- **Expected outcome:** Validar ambos params con zod antes de pasarlos al query; devolver 400 si el valor no es válido.
+- **Problem:** `approvalStatus` y `status` se castean con `as "pending" | ...` sin validaciÃ³n. Un valor invÃ¡lido produce un error de runtime de Prisma en vez de un 400 limpio.
+- **Expected outcome:** Validar ambos params con zod antes de pasarlos al query; devolver 400 si el valor no es vÃ¡lido.
 - **Done when:** `typecheck` pasa.
 - **Verification:**
   ```bash
@@ -112,7 +112,7 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ### TD-M2. perPage sin clamp en emails route
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** Medium
 - **Depends on:** None
 - **Files to touch:** `app/api/campaigns/[id]/emails/route.ts`
@@ -128,11 +128,11 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ### TD-M3. PATCH campaign expone statuses peligrosos
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** Medium
 - **Depends on:** None
 - **Files to touch:** `app/api/campaigns/[id]/route.ts`
-- **Problem:** `patchSchema` incluye `sending` y `completed` en el enum de `status`, permitiendo que un cliente corrompa la máquina de estados sin pasar por la lógica del worker.
+- **Problem:** `patchSchema` incluye `sending` y `completed` en el enum de `status`, permitiendo que un cliente corrompa la mÃ¡quina de estados sin pasar por la lÃ³gica del worker.
 - **Expected outcome:** Restringir `status` en el PATCH a solo los estados que un usuario puede establecer manualmente: `pending`, `pending_review`, `ready_to_send`, `paused`.
 - **Done when:** `typecheck` pasa.
 - **Verification:**
@@ -142,14 +142,14 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ---
 
-### TD-M4. Import/save — body sin validación zod
+### TD-M4. Import/save â€” body sin validaciÃ³n zod
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** Medium
 - **Depends on:** None
 - **Files to touch:** `app/api/import/[id]/save/route.ts`
 - **Problem:** `req.json().catch(() => ({}))` swallow JSON malformado silenciosamente. `listId` y `createListName` se usan sin schema.
-- **Expected outcome:** Schema zod con `listId: z.string().optional()` y `createListName: z.string().min(1).optional()`. Si el body es inválido, 400.
+- **Expected outcome:** Schema zod con `listId: z.string().optional()` y `createListName: z.string().min(1).optional()`. Si el body es invÃ¡lido, 400.
 - **Done when:** `typecheck` pasa.
 - **Verification:**
   ```bash
@@ -158,15 +158,15 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ---
 
-### TD-M5. Índices faltantes en List, Campaign e Import
+### TD-M5. Ãndices faltantes en List, Campaign e Import
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** Medium
 - **Depends on:** None
 - **Files to touch:** `prisma/schema.prisma`
 - **Problem:** `List`, `Campaign`, e `Import` no tienen `@@index([userId])`. Cada query user-scoped hace full table scan.
-- **Expected outcome:** `@@index([userId])` añadido a los tres modelos. Migración aplicada.
-- **Done when:** `prisma:push` o migración aplicada exitosamente.
+- **Expected outcome:** `@@index([userId])` aÃ±adido a los tres modelos. MigraciÃ³n aplicada.
+- **Done when:** `prisma:push` o migraciÃ³n aplicada exitosamente.
 - **Verification:**
   ```bash
   npm run prisma:push
@@ -175,14 +175,14 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ---
 
-### TD-M6. N+1 en generate loop — pre-fetch CampaignEmails existentes
+### TD-M6. N+1 en generate loop â€” pre-fetch CampaignEmails existentes
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** Medium
 - **Depends on:** None
 - **Files to touch:** `lib/jobs/generate-campaign.ts`
 - **Problem:** `campaignEmail.findUnique` por miembro de lista dentro del loop para ver si ya fue generado.
-- **Expected outcome:** Un `findMany` antes del loop trae todos los emails existentes para la campaña; el check dentro del loop usa un `Set` en memoria.
+- **Expected outcome:** Un `findMany` antes del loop trae todos los emails existentes para la campaÃ±a; el check dentro del loop usa un `Set` en memoria.
 - **Done when:** `typecheck` pasa; no hay `findUnique` dentro del loop.
 - **Verification:**
   ```bash
@@ -194,12 +194,12 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ### TD-L1. Dead export markBlockPermanent en rate-limit.ts
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** Low
 - **Depends on:** None
 - **Files to touch:** `lib/rate-limit.ts`
-- **Problem:** `markBlockPermanent` está exportada pero no se usa en ningún lugar del codebase. El JSDoc dice "used by the tracking pixel" — incorrecto.
-- **Expected outcome:** La función se elimina (export + implementación + función en memoria + rama Redis).
+- **Problem:** `markBlockPermanent` estÃ¡ exportada pero no se usa en ningÃºn lugar del codebase. El JSDoc dice "used by the tracking pixel" â€” incorrecto.
+- **Expected outcome:** La funciÃ³n se elimina (export + implementaciÃ³n + funciÃ³n en memoria + rama Redis).
 - **Done when:** `typecheck` pasa; grep de `markBlockPermanent` da 0 resultados.
 - **Verification:**
   ```bash
@@ -209,12 +209,12 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ---
 
-### TD-L2. sidebar-context.tsx en lib/ — mover a components/
+### TD-L2. sidebar-context.tsx en lib/ â€” mover a components/
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** Low
 - **Depends on:** None
-- **Files to touch:** `lib/sidebar-context.tsx` → `components/layout/sidebar-context.tsx`
+- **Files to touch:** `lib/sidebar-context.tsx` â†’ `components/layout/sidebar-context.tsx`
 - **Problem:** Un contexto React client-side vive en `lib/` (directorio de utilidades server-side).
 - **Expected outcome:** Archivo movido; todos los imports actualizados.
 - **Done when:** `typecheck` pasa; no hay referencias a `lib/sidebar-context`.
@@ -227,12 +227,12 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 ### TD-L3. getDailyDigestQueue faltante en queue.ts
 
-- [ ] **Status:** Pending
+- [x] **Status:** Completed
 - **Priority:** Low
 - **Depends on:** None
 - **Files to touch:** `lib/jobs/queue.ts`
 - **Problem:** `QUEUE_NAMES.dailyDigest` definido pero sin getter `getDailyDigestQueue`, a diferencia de los otros tres queues.
-- **Expected outcome:** Getter añadido con el mismo patrón singleton de los otros.
+- **Expected outcome:** Getter aÃ±adido con el mismo patrÃ³n singleton de los otros.
 - **Done when:** `typecheck` pasa.
 - **Verification:**
   ```bash
@@ -245,7 +245,7 @@ Use this checklist as a loop-engineering queue. Each loop should:
 
 Un task puede cambiar de `- [ ]` a `- [x]` solo cuando:
 
-- La implementación está completa.
-- El comando de verificación listado ha corrido exitosamente.
-- Cualquier fallo está documentado con un follow-up task.
-- El cambio está commiteado si modifica archivos del repositorio.
+- La implementaciÃ³n estÃ¡ completa.
+- El comando de verificaciÃ³n listado ha corrido exitosamente.
+- Cualquier fallo estÃ¡ documentado con un follow-up task.
+- El cambio estÃ¡ commiteado si modifica archivos del repositorio.
