@@ -128,6 +128,7 @@ services:
     environment:
       DATABASE_URL: *database-url
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set in the Easypanel project env}
+      AUTH_URL: ${AUTH_URL:?AUTH_URL must be set in the Easypanel project env}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in the Easypanel project env}
       REDIS_URL: *redis-url
       POSTGRES_HOST: postgres
