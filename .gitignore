@@ -64,3 +64,7 @@ next-env.d.ts
 /test/fixtures/test-contacts.csv
 /MailWaveMockup.html
 /.thumbnail
+
+# local agent/editor config (never commit local MCP/agent configs or skills)
+.claude/
+.opencode/
