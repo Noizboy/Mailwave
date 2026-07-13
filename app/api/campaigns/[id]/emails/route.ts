@@ -45,8 +45,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       },
       deliveryEvents: {
         where: { eventType: "opened" },
-        take: 1,
-        select: { id: true },
+        select: { occurredAt: true },
+        orderBy: { occurredAt: "asc" },
+        take: 20,
       },
     },
     orderBy: { createdAt: "asc" },
@@ -65,9 +66,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     },
   });
 
+  // An "opened" event only counts as a real human open if it arrived at least
+  // 15 s after sentAt. Events within that window are likely scanner / proxy
+  // prefetches. Filtering here (rather than at write time) means we never
+  // permanently block a real open just because a scanner fired first (CN-002).
+  const OPEN_THRESHOLD_MS = 15_000;
   const emailsWithOpened = emails.map(({ deliveryEvents, ...e }) => ({
     ...e,
-    opened: deliveryEvents.length > 0,
+    opened:
+      e.sentAt != null &&
+      deliveryEvents.some(
+        (ev) => ev.occurredAt.getTime() - e.sentAt!.getTime() >= OPEN_THRESHOLD_MS
+      ),
   }));
 
   return NextResponse.json({ emails: emailsWithOpened, total, page, pageSize: perPage });
