@@ -32,13 +32,14 @@ function clientIp(req: NextRequest): string {
   return req.headers.get("x-real-ip") ?? "unknown";
 }
 
-// Known email provider image proxies and security scanners that prefetch images
-// before the user opens the email. Requests from these are dropped so they never
-// reach the DB. Events that slip through unknown proxies are filtered at query
-// time in the emails API using the sentAt → occurredAt delta (CN-002).
+// Security scanner UAs that prefetch images at delivery time, before any user
+// action. These are hard-blocked because their fetches always arrive too early
+// to be useful and would create false open events. Events from unknown scanners
+// or email-client proxies (GoogleImageProxy, YahooMailProxy) pass through and
+// are filtered at query time in the emails API using the sentAt → occurredAt
+// delta (CN-002). Email-client proxies fetch when the user opens — not at
+// delivery — so the 15 s threshold correctly distinguishes them from scanners.
 const EMAIL_PROXY_UA = [
-  "GoogleImageProxy",
-  "YahooMailProxy",
   "Microsoft-Office",        // Office 365 SafeLinks / Attachment scanning
   "msfetch",                 // Older Microsoft mail proxies
   "Proofpoint",              // Proofpoint email security scanner

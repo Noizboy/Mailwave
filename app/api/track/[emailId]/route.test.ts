@@ -94,9 +94,11 @@ describe("GET /api/track/[emailId]", () => {
     expect(prisma.deliveryEvent.create).toHaveBeenCalledTimes(60);
   });
 
+  // Gmail (GoogleImageProxy) and Yahoo (YahooMailProxy) are intentionally NOT
+  // in this list. Those proxies fetch when the user opens, not at delivery, so
+  // their hits should be recorded and filtered by the 15 s sentAt threshold in
+  // the emails API instead of being hard-blocked here.
   it.each([
-    ["Gmail", "Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)"],
-    ["Yahoo Mail", "Mozilla/5.0 (compatible; YahooMailProxy; +https://help.yahoo.com/kb/yahoo-mail-proxy-SLN28749.html)"],
     ["Microsoft Office", "Microsoft-Office/16.0 (Windows NT 10.0; Microsoft Outlook 16.0.15726)"],
     ["Proofpoint", "Mozilla/5.0 (compatible; Proofpoint Email Security)"],
     ["Cisco IronPort", "Mozilla/5.0 (compatible; IronPort Email Security)"],
@@ -105,7 +107,7 @@ describe("GET /api/track/[emailId]", () => {
     ["Abnormal Security", "Abnormal-Security-Scanner/1.0"],
     ["AppRiver", "AppRiver Email Security/2.0"],
     ["Cloudflare Email", "Cloudflare-Email-Security/1.0"],
-  ])("returns pixel but skips open event for %s image proxy", async (_name, ua) => {
+  ])("returns pixel but skips open event for %s security scanner", async (_name, ua) => {
     mocked(prisma.campaignEmail.findUnique).mockResolvedValue({
       id: "proxy-e1",
       status: "sent",
@@ -119,6 +121,29 @@ describe("GET /api/track/[emailId]", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/gif");
     expect(prisma.deliveryEvent.create).not.toHaveBeenCalled();
+  });
+
+  // Gmail and Yahoo use image proxies that fetch when the user opens the email.
+  // Their hits must reach the DB so the 15 s sentAt threshold (in the emails API)
+  // can distinguish delivery-time prefetches from real opens.
+  it.each([
+    ["Gmail", "Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)"],
+    ["Yahoo Mail", "Mozilla/5.0 (compatible; YahooMailProxy; +https://help.yahoo.com/kb/yahoo-mail-proxy-SLN28749.html)"],
+  ])("records open event for %s image proxy (filtered by 15 s threshold in emails API)", async (_name, ua) => {
+    mocked(prisma.campaignEmail.findUnique).mockResolvedValue({
+      id: "gm-e1",
+      status: "sent",
+    } as never);
+    mocked(prisma.deliveryEvent.create).mockResolvedValue({} as never);
+
+    const res = await trackPixel(
+      trackRequest("gm-e1", "203.0.113.1", ua),
+      routeParams({ emailId: "gm-e1" })
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/gif");
+    expect(prisma.deliveryEvent.create).toHaveBeenCalledTimes(1);
   });
 
   // CN-003: Apple Mail Privacy Protection — Apple owns 17.0.0.0/8 and routes
