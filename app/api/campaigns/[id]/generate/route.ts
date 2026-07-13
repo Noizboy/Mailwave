@@ -61,9 +61,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: { status: "pending", errorReason: null },
     });
   } else {
-    // Reset all emails for a full (re-)generation
+    // Reset all non-skipped emails for a full (re-)generation; skipped emails
+    // are intentionally excluded so the user's skip decisions are preserved.
     await prisma.campaignEmail.updateMany({
-      where: { campaignId: campaign.id },
+      where: { campaignId: campaign.id, NOT: { approvalStatus: "skipped" } },
       data: { status: "pending", errorReason: null, sentAt: null },
     });
     // Reset send counters so the progress bar starts fresh

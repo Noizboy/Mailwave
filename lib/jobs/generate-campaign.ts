@@ -109,11 +109,11 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
   for (const member of members) {
     const { contact } = member;
 
-    // Skip if already generated
+    // Skip if already generated or deliberately skipped by the user
     const existing = await prisma.campaignEmail.findUnique({
       where: { campaignId_contactId: { campaignId, contactId: contact.id } },
     });
-    if (existing && existing.status !== "pending") continue;
+    if (existing && (existing.status !== "pending" || existing.approvalStatus === "skipped")) continue;
 
     try {
       const userPrompt = buildUserPrompt({
