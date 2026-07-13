@@ -809,11 +809,20 @@ interface LimitsData {
   suppressAfterEmails: number;
 }
 
+// Local form state mirrors LimitsData but allows empty strings while the user is typing.
+interface LimitsForm {
+  dailyLimit: number | "";
+  hourlyLimit: number | "";
+  suppressAfterEmails: number | "";
+}
+
+function limitsToForm(data: LimitsData): LimitsForm {
+  return { dailyLimit: data.dailyLimit, hourlyLimit: data.hourlyLimit, suppressAfterEmails: data.suppressAfterEmails };
+}
+
 function SendingLimitsSettings() {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<LimitsData | null>(() =>
-    queryClient.getQueryData<LimitsData>(["settings-limits"]) ?? null
-  );
+  const [form, setForm] = useState<LimitsForm | null>(null);
   const [saving, setSaving] = useState(false);
 
   const { data: limitsData, isLoading } = useQuery<LimitsData>({
@@ -825,29 +834,33 @@ function SendingLimitsSettings() {
     },
   });
 
-  const [prevLimits, setPrevLimits] = useState(limitsData);
-  // Populate form once when the fetched limits arrive (render-time adjustment
-  // avoids setState-in-effect).
-  if (limitsData !== prevLimits) {
-    setPrevLimits(limitsData);
-    if (limitsData && form === null) {
-      setForm(limitsData);
-    }
-  }
+  // Sync form from DB whenever fresh data arrives (covers initial load and post-save refetch).
+  // We only overwrite if form is null (initial) or after a save resets it to null.
+  useEffect(() => {
+    if (limitsData && form === null) setForm(limitsToForm(limitsData));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [limitsData]);
 
-  const setNum = (key: keyof LimitsData, value: string) =>
-    setForm((f) => f ? { ...f, [key]: parseInt(value) || 0 } : f);
+  const setNum = (key: keyof LimitsForm, value: string) =>
+    setForm((f) => f ? { ...f, [key]: value === "" ? "" : (parseInt(value, 10) || "") } : f);
 
   const handleSave = async () => {
     if (!form) return;
+    const payload: LimitsData = {
+      dailyLimit: Number(form.dailyLimit) || 1,
+      hourlyLimit: Number(form.hourlyLimit) || 1,
+      suppressAfterEmails: Number(form.suppressAfterEmails) || 1,
+    };
     setSaving(true);
     const res = await fetch("/api/settings/sending-limits", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
       toast.success("Sending limits saved", "New rate limits will apply to upcoming campaigns.");
+      // Reset to null so the useEffect repopulates from the fresh DB values.
+      setForm(null);
       queryClient.invalidateQueries({ queryKey: ["settings-limits"] });
     } else {
       toast.error("Could not save limits", "An unexpected error occurred. Try again.");

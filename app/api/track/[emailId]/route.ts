@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyEmailId } from "@/lib/track-sign";
-import { isBlocked, markBlock, checkRateLimit } from "@/lib/rate-limit";
+import { isBlocked, markBlockPermanent, checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -9,10 +9,6 @@ const PIXEL = Buffer.from(
   "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
   "base64"
 );
-
-// Record at most one open event per email every 10 minutes. Additional pixel
-// loads (preview-pane re-renders, forwards, etc.) are ignored within the window.
-const OPEN_BLOCK_MS = 10 * 60 * 1000;
 
 // SEC-005: cap pixel hits at 60/min/IP to stop metric inflation and ID
 // scraping. The pixel is ALWAYS returned — only the `opened` event is silenced.
@@ -49,9 +45,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
   // SEC-005: per-IP rate limit. When exceeded, still return the pixel but
   // skip recording the `opened` event so email clients keep rendering.
 
-  // Rate-limit per emailId: a single open is recorded per 10-minute window.
-  // Additional pixel loads (e.g. from preview panes re-rendering) are ignored
-  // and do NOT consume the IP quota — only fresh opens do.
+  // One open event per email, ever. Additional pixel loads are ignored and do
+  // NOT consume the IP quota — only fresh opens do.
   const key = `track:${emailId}`;
   if ((await isBlocked(key)).blocked) {
     return pixelResponse();
@@ -73,8 +68,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
       await prisma.deliveryEvent.create({
         data: { campaignEmailId: emailId, eventType: "opened" },
       });
-      // Ignore further opens for this email for 10 minutes.
-      await markBlock(key, OPEN_BLOCK_MS);
+      await markBlockPermanent(key);
     }
   } catch {
     // Never fail — always return the pixel

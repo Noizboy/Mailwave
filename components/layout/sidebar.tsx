@@ -85,11 +85,9 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       {/* Version + credits */}
       <div className="mt-auto flex flex-col items-center gap-0.5 pb-1 pt-4 text-center">
-        {process.env.NEXT_PUBLIC_APP_VERSION && (
-          <span className="text-[11px] text-white/30">
-            Version {process.env.NEXT_PUBLIC_APP_VERSION}
-          </span>
-        )}
+        <span className="text-[11px] text-white/30">
+          v1.0.5
+        </span>
         <span className="text-[11px] text-white/30">
           Created by Alejandro Pujols
         </span>

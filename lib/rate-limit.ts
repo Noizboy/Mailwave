@@ -22,7 +22,9 @@ function memoryIsBlocked(key: string): { blocked: boolean; retryAfterSeconds: nu
   const entry = memoryStore.get(key);
   if (!entry) return { blocked: false, retryAfterSeconds: 0 };
   if (Date.now() < entry.blockedUntil) {
-    return { blocked: true, retryAfterSeconds: Math.ceil((entry.blockedUntil - Date.now()) / 1000) };
+    const retryAfterSeconds =
+      entry.blockedUntil === Infinity ? 0 : Math.ceil((entry.blockedUntil - Date.now()) / 1000);
+    return { blocked: true, retryAfterSeconds };
   }
   memoryStore.delete(key);
   return { blocked: false, retryAfterSeconds: 0 };
@@ -44,6 +46,10 @@ function memoryResetFailures(key: string): void {
 
 function memoryMarkBlock(key: string, blockMs: number): void {
   memoryStore.set(key, { failures: MAX_FAILURES, blockedUntil: Date.now() + blockMs });
+}
+
+function memoryMarkBlockPermanent(key: string): void {
+  memoryStore.set(key, { failures: MAX_FAILURES, blockedUntil: Infinity });
 }
 
 // ---- Redis backend --------------------------------------------------------
@@ -87,10 +93,11 @@ export async function isBlocked(key: string): Promise<{ blocked: boolean; retryA
   if (!redis) return memoryIsBlocked(key);
   try {
     const ttl = await redis.pttl(`${BLOCK_PREFIX}${key}`);
-    if (ttl > 0) {
-      return { blocked: true, retryAfterSeconds: Math.ceil(ttl / 1000) };
-    }
-    return { blocked: false, retryAfterSeconds: 0 };
+    // ttl === -2: key doesn't exist → not blocked
+    // ttl === -1: key exists with no TTL (permanent block) → blocked
+    // ttl >  0:  key exists with TTL → blocked
+    if (ttl === -2) return { blocked: false, retryAfterSeconds: 0 };
+    return { blocked: true, retryAfterSeconds: ttl > 0 ? Math.ceil(ttl / 1000) : 0 };
   } catch {
     return memoryIsBlocked(key);
   }
@@ -132,8 +139,7 @@ export async function resetFailures(key: string): Promise<void> {
 
 /**
  * Immediately blocks `key` for `blockMs` milliseconds, regardless of prior
- * failure count. Used by the tracking pixel to record at most one open event
- * per email per window (CN-002).
+ * failure count.
  */
 export async function markBlock(key: string, blockMs: number): Promise<void> {
   const redis = await getRedis();
@@ -145,6 +151,25 @@ export async function markBlock(key: string, blockMs: number): Promise<void> {
     await redis.set(`${BLOCK_PREFIX}${key}`, "1", "PX", blockMs);
   } catch {
     memoryMarkBlock(key, blockMs);
+  }
+}
+
+/**
+ * Permanently blocks `key` with no expiry. Used by the tracking pixel so that
+ * once an open event is recorded for an email it is never recorded again
+ * (CN-002). Avoids the overhead of a TTL that would need to be large enough
+ * to outlive any campaign lifetime.
+ */
+export async function markBlockPermanent(key: string): Promise<void> {
+  const redis = await getRedis();
+  if (!redis) {
+    memoryMarkBlockPermanent(key);
+    return;
+  }
+  try {
+    await redis.set(`${BLOCK_PREFIX}${key}`, "1");
+  } catch {
+    memoryMarkBlockPermanent(key);
   }
 }
 

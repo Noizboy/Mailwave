@@ -135,10 +135,8 @@ For the full stack with app, worker, PostgreSQL, and Redis:
 
 ```bash
 copy .env.docker.example .env
-docker compose -f docker-compose.local.yml up -d --build
+docker compose up -d --build
 ```
-
-See [docs/docker.md](docs/docker.md) for the full Docker guide.
 
 ## Easypanel
 

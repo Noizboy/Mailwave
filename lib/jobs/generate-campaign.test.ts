@@ -239,6 +239,79 @@ describe("processGenerate", () => {
     );
   });
 
+  // GEN-002: hardened isServiceError — rate limit, auth errors, and SDK class names
+  it("aborts generation when the AI service returns 429 (rate limit)", async () => {
+    mocked(prisma.listMember.findMany).mockResolvedValue([
+      member("c1", "a@b.com"),
+      member("c2", "c@d.com"),
+    ] as never);
+    mocked(generateEmail).mockRejectedValue(
+      Object.assign(new Error("Rate limit exceeded"), { status: 429 })
+    );
+
+    const result = await processGenerate(fakeJob());
+
+    expect(generateEmail).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ successCount: 0, failCount: 0 });
+    expect(prisma.campaign.update).toHaveBeenLastCalledWith({
+      where: { id: "camp-1" },
+      data: { status: "failed" },
+    });
+  });
+
+  it("aborts generation when the AI API key is invalid (401)", async () => {
+    mocked(prisma.listMember.findMany).mockResolvedValue([
+      member("c1", "a@b.com"),
+      member("c2", "c@d.com"),
+    ] as never);
+    mocked(generateEmail).mockRejectedValue(
+      Object.assign(new Error("Incorrect API key provided"), { status: 401 })
+    );
+
+    const result = await processGenerate(fakeJob());
+
+    expect(generateEmail).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ successCount: 0, failCount: 0 });
+    expect(prisma.campaign.update).toHaveBeenLastCalledWith({
+      where: { id: "camp-1" },
+      data: { status: "failed" },
+    });
+  });
+
+  it("aborts generation when the AI service throws APIConnectionError (no status)", async () => {
+    mocked(prisma.listMember.findMany).mockResolvedValue([
+      member("c1", "a@b.com"),
+      member("c2", "c@d.com"),
+    ] as never);
+    const connError = Object.assign(new Error("Connection error"), { name: "APIConnectionError" });
+    mocked(generateEmail).mockRejectedValue(connError);
+
+    const result = await processGenerate(fakeJob());
+
+    expect(generateEmail).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ successCount: 0, failCount: 0 });
+    expect(prisma.campaign.update).toHaveBeenLastCalledWith({
+      where: { id: "camp-1" },
+      data: { status: "failed" },
+    });
+  });
+
+  it("records a per-contact failure (not aborts) for non-service errors like bad JSON", async () => {
+    mocked(prisma.listMember.findMany).mockResolvedValue([
+      member("c1", "a@b.com"),
+      member("c2", "c@d.com"),
+    ] as never);
+    mocked(generateEmail)
+      .mockRejectedValueOnce(new Error("Unexpected token in JSON"))
+      .mockResolvedValueOnce(generation);
+
+    const result = await processGenerate(fakeJob());
+
+    // Both contacts are attempted; only the first fails
+    expect(generateEmail).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ successCount: 1, failCount: 1 });
+  });
+
   it("reports progress after each contact", async () => {
     mocked(prisma.listMember.findMany).mockResolvedValue([
       member("c1", "a@b.com"),

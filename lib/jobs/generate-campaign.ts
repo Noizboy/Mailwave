@@ -257,16 +257,21 @@ function isServiceError(err: unknown): boolean {
   const msg = err.message.toLowerCase();
   const name = err.name.toLowerCase();
 
-  // OpenAI / Anthropic SDKs expose a .status property on API errors
+  // OpenAI / Anthropic SDKs expose a .status property on API errors.
+  // 429 (rate limit), 401/403 (auth) and 5xx all mean the whole batch
+  // is unrecoverable — abort early rather than failing every contact.
   const status = (err as { status?: number }).status;
-  if (typeof status === "number" && status >= 500) return true;
+  if (typeof status === "number" && (status >= 500 || status === 429 || status === 401 || status === 403)) return true;
 
   return (
     name === "aborterror" || // AbortSignal.timeout fired
     name === "timeouterror" ||
     name === "apiconnectionerror" ||
     name === "apiconnectiontimeouterror" ||
+    name === "apiuseraborderror" ||
     name === "internalservererror" ||
+    name === "autherror" ||
+    name === "authenticationerror" ||
     msg.includes("timeout") ||
     msg.includes("econnrefused") ||
     msg.includes("econnreset") ||
@@ -288,6 +293,9 @@ export function startGenerateWorker() {
   const worker = new Worker(QUEUE_NAMES.generate, processGenerate, {
     connection: { url: process.env.REDIS_URL ?? "redis://localhost:6379" },
     concurrency: 2,
+    // Generous lock window for large contact lists; BullMQ auto-renews while active
+    lockDuration: 300_000, // 5 min
+    lockRenewTime: 120_000, // renew every 2 min
   });
 
   worker.on("failed", (job, err) => {

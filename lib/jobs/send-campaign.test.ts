@@ -455,6 +455,85 @@ describe("processSend", () => {
     expect(bounceCalls).toHaveLength(1);
   });
 
+  // SEND-001 / SEND-002: re-enqueue instead of blocking sleep
+  it("re-enqueues with delay when nextSendAt is in the future (pacing sleep fix)", async () => {
+    const futureMs = Date.now() + 60_000;
+    mocked(prisma.campaign.findUnique).mockResolvedValue({
+      ...baseCampaign,
+      status: "sending",
+      activeSendRunId: "run-1",
+      nextSendAt: new Date(futureMs),
+    } as never);
+    mocked(prisma.campaignEmail.findMany).mockResolvedValue([approvedEmail("e1", "c1")] as never);
+    mocked(prisma.campaignEmail.count).mockResolvedValue(1 as never);
+
+    const result = await processSend(fakeJob());
+
+    // Email must NOT have been sent — job returned early
+    expect(sendMail).not.toHaveBeenCalled();
+    // A successor job must have been enqueued with a positive delay
+    expect(queueAdd).toHaveBeenCalledWith(
+      "send",
+      expect.objectContaining({ campaignId: "camp-1" }),
+      expect.objectContaining({ delay: expect.any(Number) })
+    );
+    const delay = (queueAdd.mock.calls[0][2] as { delay: number }).delay;
+    expect(delay).toBeGreaterThan(500);
+    // Campaign left in paused state for the successor job to reclaim
+    expect(result).toMatchObject({ finalStatus: "paused" });
+  });
+
+  it("re-enqueues with delay after sending when interval > 0 (interval sleep fix)", async () => {
+    mocked(prisma.campaign.findFirst).mockResolvedValue({
+      ...baseCampaign,
+      status: "ready_to_send",
+      intervalType: "fixed",
+      minInterval: 5, // 5-minute interval → 300_000 ms
+      maxInterval: 5,
+    } as never);
+    mocked(prisma.campaign.findUnique).mockResolvedValue({
+      ...baseCampaign,
+      status: "sending",
+      activeSendRunId: "run-1",
+      nextSendAt: null,
+      intervalType: "fixed",
+      minInterval: 5,
+      maxInterval: 5,
+    } as never);
+    mocked(prisma.campaignEmail.findMany).mockResolvedValue([
+      approvedEmail("e1", "c1"),
+      approvedEmail("e2", "c2"),
+    ] as never);
+    mocked(prisma.campaignEmail.count).mockResolvedValue(1 as never);
+
+    const result = await processSend(fakeJob());
+
+    // Only the first email is sent; second is left for the successor job
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    expect(queueAdd).toHaveBeenCalledWith(
+      "send",
+      expect.objectContaining({ campaignId: "camp-1" }),
+      expect.objectContaining({ delay: 300_000 })
+    );
+    expect(result).toMatchObject({ sentCount: 1, finalStatus: "paused" });
+  });
+
+  it("sends all emails in one job when interval is 0 (burst mode, no re-enqueue)", async () => {
+    // baseCampaign already has minInterval: 0, maxInterval: 0
+    mocked(prisma.campaignEmail.findMany).mockResolvedValue([
+      approvedEmail("e1", "c1"),
+      approvedEmail("e2", "c2"),
+      approvedEmail("e3", "c3"),
+    ] as never);
+
+    const result = await processSend(fakeJob());
+
+    expect(sendMail).toHaveBeenCalledTimes(3);
+    // No interval re-enqueue — only the rate-limit queueAdd path would fire (it didn't here)
+    expect(queueAdd).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ sentCount: 3, finalStatus: "completed" });
+  });
+
   it("skips the bounce notification entirely when email_bounced pref is off", async () => {
     mocked(prisma.notificationPreference.findMany).mockResolvedValue([
       { eventType: "email_bounced", inApp: false },

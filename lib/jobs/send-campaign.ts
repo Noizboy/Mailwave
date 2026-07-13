@@ -82,6 +82,8 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     auth: { user: smtpConfig.username!, pass: smtpPassword },
     // Never disable certificate validation — see CN-007. The "none" mode
     // means no TLS is used; for "tls"/"ssl" the default validation applies.
+    connectionTimeout: 10_000,
+    socketTimeout: 30_000,
   });
 
   // Get sending limits for this user
@@ -115,10 +117,22 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     if (!freshCampaign || freshCampaign.status === "paused" || freshCampaign.activeSendRunId !== sendRunId) break;
 
     const nextSendTargetMs = freshCampaign.nextSendAt ? new Date(freshCampaign.nextSendAt).getTime() : Date.now();
-    if (nextSendTargetMs > Date.now()) {
-      await new Promise((resolve) => setTimeout(resolve, nextSendTargetMs - Date.now()));
-      freshCampaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
-      if (!freshCampaign || freshCampaign.status === "paused" || freshCampaign.activeSendRunId !== sendRunId) break;
+    const waitMs = nextSendTargetMs - Date.now();
+    if (waitMs > 500) {
+      // Re-enqueue with delay instead of blocking the worker thread
+      const newSendRunId = randomUUID();
+      await getSendQueue().add(
+        "send",
+        { campaignId, userId, sendRunId: newSendRunId },
+        {
+          delay: waitMs,
+          jobId: `send-${campaignId}-${newSendRunId}`,
+          attempts: 1,
+          removeOnComplete: { age: 3600 },
+          removeOnFail: { age: 86400 },
+        }
+      );
+      break;
     }
 
     // Check daily/hourly limits
@@ -215,8 +229,8 @@ export async function processSend(job: Job<SendCampaignJobData>) {
         subject: email.subject ?? "(No subject)",
         text: email.body ?? "",
         html:
-          `<div style="font-family:sans-serif;font-size:14px;line-height:1.6">${htmlBody}</div>` +
-          `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none" />`,
+          `<img src="${pixelUrl}" width="1" height="1" alt="" border="0" style="height:1px!important;width:1px!important;border-width:0!important;margin:0!important;padding:0!important" />` +
+          `<div style="font-family:sans-serif;font-size:14px;line-height:1.6">${htmlBody}</div>`,
       });
 
       await prisma.campaignEmail.update({
@@ -300,16 +314,33 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       : campaign.minInterval;
 
     const hasMorePendingEmails = index < pendingEmails.length - 1;
+    const intervalMs = interval * 60 * 1000;
+
     await prisma.campaign.update({
       where: { id: campaignId },
       data: {
-        nextSendAt: hasMorePendingEmails ? new Date(Date.now() + interval * 60 * 1000) : null,
+        nextSendAt: hasMorePendingEmails ? new Date(Date.now() + intervalMs) : null,
       },
     });
 
-    await new Promise((resolve) => setTimeout(resolve, interval * 60 * 1000));
-
     await job.updateProgress(Math.round(((sentCount + failCount) / pendingEmails.length) * 100));
+
+    if (hasMorePendingEmails && intervalMs > 500) {
+      // Re-enqueue with delay instead of blocking the worker thread
+      const newSendRunId = randomUUID();
+      await getSendQueue().add(
+        "send",
+        { campaignId, userId, sendRunId: newSendRunId },
+        {
+          delay: intervalMs,
+          jobId: `send-${campaignId}-${newSendRunId}`,
+          attempts: 1,
+          removeOnComplete: { age: 3600 },
+          removeOnFail: { age: 86400 },
+        }
+      );
+      break;
+    }
   }
 
   // Check if all done
@@ -372,6 +403,9 @@ export function startSendWorker() {
   const worker = new Worker(QUEUE_NAMES.send, processSend, {
     connection: { url: process.env.REDIS_URL ?? "redis://localhost:6379" },
     concurrency: 1, // Serial — one send job at a time per account
+    // After SEND-001/002 each job sends at most one email; 60s is generous
+    lockDuration: 60_000,
+    lockRenewTime: 20_000,
   });
 
   worker.on("failed", (job, err) => {

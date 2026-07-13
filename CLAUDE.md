@@ -32,7 +32,7 @@ npm run seed             # idempotent seed → demo@mailwave.app / password123
 npm run rotate-key       # re-encrypt secrets after changing ENCRYPTION_KEY (set OLD_ENCRYPTION_KEY)
 ```
 
-Local dev needs Postgres + Redis running. `docker compose -f docker-compose.local.yml up -d --build` brings up the full stack (app, worker, Postgres, Redis). Required env vars: `DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET`, `ENCRYPTION_KEY` (32+ chars), `NEXTAUTH_URL`. See `.env.example`.
+Local dev needs Postgres + Redis running. Required env vars: `DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET`, `ENCRYPTION_KEY` (32+ chars), `NEXTAUTH_URL`. See `.env.example`. For a full Docker install use `docker compose up -d --build` with `docker-compose.yml`.
 
 ## Architecture
 
