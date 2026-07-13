@@ -7,7 +7,7 @@ test.describe("auth flow", () => {
   test("rejects a wrong password and stays on login", async ({ page }) => {
     await page.goto("/login");
     await page.getByLabel("Email").fill("demo@mailwave.app");
-    await page.getByLabel("Password").fill("wrong-password");
+    await page.getByRole("textbox", { name: "Password" }).fill("wrong-password");
     await page.getByRole("button", { name: "Sign in" }).click();
 
     await expect(page.getByText("Invalid email or password.")).toBeVisible();
@@ -17,7 +17,7 @@ test.describe("auth flow", () => {
   test("logs in with valid credentials and lands on the dashboard", async ({ page }) => {
     await page.goto("/login");
     await page.getByLabel("Email").fill("demo@mailwave.app");
-    await page.getByLabel("Password").fill("password123");
+    await page.getByRole("textbox", { name: "Password" }).fill("password123");
     await page.getByRole("button", { name: "Sign in" }).click();
 
     await page.waitForURL("**/dashboard");
