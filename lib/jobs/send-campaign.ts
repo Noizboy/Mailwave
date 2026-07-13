@@ -228,13 +228,18 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       const htmlBody = (email.body ?? "").replace(/\n/g, "<br>");
       const pixelUrl = `${appUrl}/api/track/${email.id}?s=${signEmailId(email.id)}`;
 
-      // Use base64 Content-Transfer-Encoding for the HTML part so that
-      // quoted-printable encoding never mangles '=' characters in the tracking
-      // pixel URL (CN-QP-001). With QP the '=' in '?s=<sig>' becomes '=3D',
-      // which corrupts the HMAC signature and silently breaks open tracking.
+      // nodemailer's `encoding: "base64"` on an alternatives entry means
+      // "this content string is already base64-encoded" — it calls
+      // Buffer.from(content, "base64") internally. Passing a plain HTML string
+      // with encoding:"base64" would produce garbage bytes (CN-QP-001).
+      // Pre-encoding the HTML as base64 makes the contract explicit: nodemailer
+      // decodes it to the original bytes and then sends the part with
+      // Content-Transfer-Encoding: base64, which avoids QP encoding '=' as '=3D'
+      // in the tracking pixel URL.
       const htmlContent =
         `<img src="${pixelUrl}" width="1" height="1" alt="" border="0" style="height:1px!important;width:1px!important;border-width:0!important;margin:0!important;padding:0!important" />` +
         `<div style="font-family:sans-serif;font-size:14px;line-height:1.6">${htmlBody}</div>`;
+      const htmlBase64 = Buffer.from(htmlContent, "utf-8").toString("base64");
 
       await transporter.sendMail({
         from: `"${smtpConfig.fromName ?? ""}" <${smtpConfig.fromEmail}>`,
@@ -242,7 +247,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
         to: email.contact.email,
         subject: email.subject ?? "(No subject)",
         text: email.body ?? "",
-        alternatives: [{ contentType: "text/html", encoding: "base64", content: htmlContent }],
+        alternatives: [{ contentType: "text/html; charset=utf-8", encoding: "base64", content: htmlBase64 }],
       });
 
       await prisma.campaignEmail.update({
