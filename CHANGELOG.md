@@ -36,6 +36,29 @@ All notable changes to Mailwave are documented here.
 ### Changed
 - Removed duplicate `docker-compose.easypanel.yml`. It was byte-for-byte identical to `docker-compose.yml`, which is the canonical Compose file for Easypanel installs.
 
+### Performance
+- **Send loop rate-limit N+1 eliminated (TD-H1)** — Hourly and daily sent-count queries were running once per recipient inside the send loop. They now run once before the loop; local counters track progress in-memory. A 1 000-recipient campaign goes from 2 000 extra DB queries to 2.
+- **Batch contact import (TD-H4)** — The import/save endpoint replaced a per-row `contact.upsert` + `listMember.upsert` loop with 4 bulk queries regardless of import size: find existing emails, `createMany` new contacts, fetch all IDs, `createMany` memberships. A 10 000-row import goes from 20 000 queries to 4.
+- **Generate loop pre-fetch (TD-M6)** — `campaignEmail.findUnique` per list member was replaced with a single `findMany` before the loop. The in-loop check is now an O(1) `Map` lookup.
+- **Reports open-rate query (TD-H3)** — Replaced an unbounded `deliveryEvent.findMany` (all opened events across all campaigns) with a targeted `campaignEmail.findMany` that fetches only sent emails that have at least one opened event. Eliminates a full-table scan on large accounts.
+- **DB indexes on userId (TD-M5)** — Added `@@index([userId])` to `List`, `Campaign`, and `Import` models. Every user-scoped query on these tables was previously a full table scan.
+
+### Security / Correctness
+- **Corrupted email bodies fixed (CN-QP-001)** — Outbound emails were arriving garbled (`Šh,­...`) because nodemailer's `encoding: "base64"` in the `alternatives` array means "decode this string from base64 before sending", not "use base64 CTE". HTML is now pre-encoded with `Buffer.from(html, "utf-8").toString("base64")` before being handed to nodemailer.
+- **Send route status gate corrected (TD-H5)** — The send endpoint was accepting `pending_review` as a valid status to trigger sending, but the worker silently no-ops for that status. Campaigns in `pending_review` now receive a clear `409` instead of a phantom `200 queued`.
+- **Campaign PATCH exposes only safe statuses (TD-M3)** — The PATCH schema for campaigns now restricts the `status` field to states a user can set manually (`pending`, `pending_review`, `ready_to_send`, `paused`). Previously `sending`, `completed`, and `failed` were also accepted, allowing clients to corrupt the state machine.
+- **Enum validation on email list query params (TD-M1/M2)** — `approvalStatus` and `status` filter params on `GET /campaigns/[id]/emails` are now validated with zod. Invalid values return `400` instead of a Prisma runtime error. `perPage` is clamped to `[1, 100]`.
+- **Import body validation (TD-M4)** — `POST /import/[id]/save` now validates its JSON body with a zod schema. Malformed JSON or unknown fields return `400` instead of silently proceeding.
+- **Export row cap (TD-H2)** — `GET /reports/export` now caps results at 10 000 rows and returns `X-Truncated: true` when the limit is hit. Previously an account with 100 k+ emails could exhaust server memory.
+
+### Refactoring
+- **Sidebar context moved to components (TD-L2)** — `lib/sidebar-context.tsx` relocated to `components/layout/sidebar-context.tsx`. All imports updated; old file removed.
+- **`getDailyDigestQueue` singleton added (TD-L3)** — Queue accessor added to `lib/jobs/queue.ts` matching the pattern of the other three queues.
+- **Dead `markBlockPermanent` export removed (TD-L1)** — Unused export and its in-memory helper deleted from `lib/rate-limit.ts`. The JSDoc incorrectly claimed it was used by the tracking pixel.
+
+### Tests
+- **17 new API route tests (TD-L4)** — Added coverage for `GET /campaigns/[id]/emails` (401, 404, 400, 15 s open-threshold filter, perPage clamp), `PATCH /campaigns/[id]/emails/[emailId]` (401, 404, 403 suppressed contact, success), `POST /campaigns/[id]/emails/[emailId]/regenerate` (401, 404, 400 no AI config, success, 500 AI error), `GET /settings/sending-limits` (stored values), and `PUT /settings/sending-limits` (401, 400, smtp upsert, suppress-job enqueue, no job without suppressAfterEmails). Total: 272 tests.
+
 ---
 
 ## [ac54394] — Prepare Easypanel default deployment
