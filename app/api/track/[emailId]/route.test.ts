@@ -79,9 +79,47 @@ describe("GET /api/track/[emailId]", () => {
     expect(prisma.deliveryEvent.create).toHaveBeenCalledTimes(60);
   });
 
+  it("skips open event when pixel fires within 15 s of sentAt (scanner heuristic)", async () => {
+    const recentSentAt = new Date(Date.now() - 2_000); // 2 seconds ago
+    mocked(prisma.campaignEmail.findUnique).mockResolvedValue({
+      id: "scanner-e1",
+      status: "sent",
+      sentAt: recentSentAt,
+    } as never);
+
+    const res = await trackPixel(
+      trackRequest("scanner-e1", "203.0.113.1"),
+      routeParams({ emailId: "scanner-e1" })
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/gif");
+    expect(prisma.deliveryEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("records open event when pixel fires more than 15 s after sentAt", async () => {
+    const oldSentAt = new Date(Date.now() - 20_000); // 20 seconds ago
+    mocked(prisma.campaignEmail.findUnique).mockResolvedValue({
+      id: "human-e1",
+      status: "sent",
+      sentAt: oldSentAt,
+    } as never);
+    mocked(prisma.deliveryEvent.create).mockResolvedValue({} as never);
+
+    const res = await trackPixel(
+      trackRequest("human-e1", "203.0.113.1"),
+      routeParams({ emailId: "human-e1" })
+    );
+
+    expect(res.status).toBe(200);
+    expect(prisma.deliveryEvent.create).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ["Gmail", "Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)"],
     ["Yahoo Mail", "Mozilla/5.0 (compatible; YahooMailProxy; +https://help.yahoo.com/kb/yahoo-mail-proxy-SLN28749.html)"],
+    ["Microsoft Office", "Microsoft-Office/16.0 (Windows NT 10.0; Microsoft Outlook 16.0.15726)"],
+    ["Proofpoint", "Mozilla/5.0 (compatible; Proofpoint Email Security)"],
   ])("returns pixel but skips open event for %s image proxy", async (_name, ua) => {
     mocked(prisma.campaignEmail.findUnique).mockResolvedValue({
       id: "proxy-e1",

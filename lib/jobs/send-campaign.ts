@@ -386,7 +386,14 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       failedCount: emailMetrics.failedCount,
       skippedCount: emailMetrics.skippedCount,
       pendingCount: emailMetrics.pendingCount,
-      nextSendAt: rateLimitResumeAt ?? null,
+      // For rate-limit: use the computed resume time.
+    // For completion or pause: clear it.
+    // For interval re-enqueue: leave it as-is (already set in the loop above).
+    ...(rateLimitResumeAt !== null
+      ? { nextSendAt: rateLimitResumeAt }
+      : finalStatus === "sending"
+      ? {}
+      : { nextSendAt: null }),
       ...(finalStatus === "completed" ? { completedAt: new Date() } : {}),
     },
   });

@@ -32,11 +32,21 @@ function clientIp(req: NextRequest): string {
   return req.headers.get("x-real-ip") ?? "unknown";
 }
 
-// Known email provider image proxies that prefetch images before the user opens
-// the email. Requests from these proxies must not be counted as real opens.
+// Known email provider image proxies and security scanners that prefetch images
+// before the user opens the email. Requests from these must not count as opens.
 // Apple Mail Privacy Protection cannot be detected this way (it spoofs a normal
-// Safari User-Agent), so it is not listed here.
-const EMAIL_PROXY_UA = ["GoogleImageProxy", "YahooMailProxy"];
+// Safari User-Agent), so it is not listed here — the sentAt time check below
+// catches that case.
+const EMAIL_PROXY_UA = [
+  "GoogleImageProxy",
+  "YahooMailProxy",
+  "Microsoft-Office",        // Office 365 SafeLinks / Attachment scanning
+  "msfetch",                 // Older Microsoft mail proxies
+  "Proofpoint",              // Proofpoint email security scanner
+  "Barracuda",               // Barracuda Sentinel
+  "Mimecast",                // Mimecast email security
+  "proton-go-http-client",   // ProtonMail proxy
+];
 
 function isKnownEmailProxy(req: NextRequest): boolean {
   const ua = req.headers.get("user-agent") ?? "";
@@ -79,9 +89,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
   try {
     const email = await prisma.campaignEmail.findUnique({
       where: { id: emailId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, sentAt: true },
     });
     if (email?.status === "sent") {
+      // Ignore opens that arrive within 5 seconds of sentAt. SMTP-level security
+      // scanners and some mail proxies (including Apple MPP on fast connections)
+      // fetch tracking pixels the moment an email is accepted by the server,
+      // producing false opens. Legitimate human opens require the email to be
+      // delivered, a notification to appear, and the user to tap/click — that
+      // takes at minimum several seconds after sentAt.
+      if (email.sentAt && Date.now() - email.sentAt.getTime() < 15_000) {
+        return pixelResponse();
+      }
       await prisma.deliveryEvent.create({
         data: { campaignEmailId: emailId, eventType: "opened" },
       });
