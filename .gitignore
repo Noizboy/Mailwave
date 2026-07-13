@@ -58,6 +58,8 @@ next-env.d.ts
 /test-results/
 /lighthouse-reports/
 /testsprite_tests/
+.testsprite/
+/testsprite.mailwave-smoke.plan.json
 
 # scratch / vendor artifacts not part of the product
 /support.js
