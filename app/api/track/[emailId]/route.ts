@@ -32,6 +32,17 @@ function clientIp(req: NextRequest): string {
   return req.headers.get("x-real-ip") ?? "unknown";
 }
 
+// Known email provider image proxies that prefetch images before the user opens
+// the email. Requests from these proxies must not be counted as real opens.
+// Apple Mail Privacy Protection cannot be detected this way (it spoofs a normal
+// Safari User-Agent), so it is not listed here.
+const EMAIL_PROXY_UA = ["GoogleImageProxy", "YahooMailProxy"];
+
+function isKnownEmailProxy(req: NextRequest): boolean {
+  const ua = req.headers.get("user-agent") ?? "";
+  return EMAIL_PROXY_UA.some((proxy) => ua.includes(proxy));
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ emailId: string }> }) {
   const { emailId } = await params;
   const signature = req.nextUrl.searchParams.get("s");
@@ -44,6 +55,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ emai
 
   // SEC-005: per-IP rate limit. When exceeded, still return the pixel but
   // skip recording the `opened` event so email clients keep rendering.
+
+  // Known email proxy prefetch — Gmail and Yahoo fetch images before the user
+  // opens the email. Never count these as real opens.
+  if (isKnownEmailProxy(req)) {
+    return pixelResponse();
+  }
 
   // One open event per email, ever. Additional pixel loads are ignored and do
   // NOT consume the IP quota — only fresh opens do.

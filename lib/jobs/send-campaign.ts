@@ -109,6 +109,10 @@ export async function processSend(job: Job<SendCampaignJobData>) {
   let sentCount = 0;
   let failCount = 0;
   let rateLimitResumeAt: Date | null = null;
+  // True when we re-enqueued a continuation job (interval or rate-limit); in
+  // that case the campaign should stay "sending" — not flip to "paused" — so
+  // the UI doesn't show a spurious "Resume Sending" button between sends.
+  let reEnqueuedContinuation = false;
 
   for (let index = 0; index < pendingEmails.length; index++) {
     const email = pendingEmails[index];
@@ -132,6 +136,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
           removeOnFail: { age: 86400 },
         }
       );
+      reEnqueuedContinuation = true;
       break;
     }
 
@@ -201,6 +206,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
         }
       );
 
+      reEnqueuedContinuation = true;
       break;
     }
 
@@ -339,6 +345,7 @@ export async function processSend(job: Job<SendCampaignJobData>) {
           removeOnFail: { age: 86400 },
         }
       );
+      reEnqueuedContinuation = true;
       break;
     }
   }
@@ -366,7 +373,9 @@ export async function processSend(job: Job<SendCampaignJobData>) {
     return { sentCount, failCount, finalStatus: "stale" };
   }
 
-  const finalStatus = remaining === 0 ? "completed" : "paused";
+  // Stay "sending" when a continuation job was enqueued (interval or rate-limit
+  // wait); only flip to "paused" when the campaign truly needs manual action.
+  const finalStatus = remaining === 0 ? "completed" : reEnqueuedContinuation ? "sending" : "paused";
 
   await prisma.campaign.updateMany({
     where: { id: campaignId, activeSendRunId: sendRunId },

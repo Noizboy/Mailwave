@@ -215,7 +215,7 @@ describe("processSend", () => {
     );
   });
 
-  it("stops sending when the hourly limit is reached and leaves the campaign paused", async () => {
+  it("stops sending when the hourly limit is reached and leaves the campaign sending (auto-resume scheduled)", async () => {
     mocked(prisma.campaignEmail.findMany).mockResolvedValue([approvedEmail("e1", "c1")] as never);
     mocked(prisma.deliveryEvent.count).mockResolvedValue(100 as never); // == hourlyLimit
     mocked(prisma.campaignEmail.count).mockResolvedValue(1 as never); // still remaining
@@ -223,7 +223,7 @@ describe("processSend", () => {
     const result = await processSend(fakeJob());
 
     expect(sendMail).not.toHaveBeenCalled();
-    expect(result).toEqual({ sentCount: 0, failCount: 0, finalStatus: "paused" });
+    expect(result).toEqual({ sentCount: 0, failCount: 0, finalStatus: "sending" });
     expect(prisma.notification.create).not.toHaveBeenCalled();
     expect(queueAdd).toHaveBeenCalledWith("send", expect.objectContaining({ campaignId: "camp-1" }), expect.objectContaining({ delay: expect.any(Number) }));
   });
@@ -479,8 +479,8 @@ describe("processSend", () => {
     );
     const delay = (queueAdd.mock.calls[0][2] as { delay: number }).delay;
     expect(delay).toBeGreaterThan(500);
-    // Campaign left in paused state for the successor job to reclaim
-    expect(result).toMatchObject({ finalStatus: "paused" });
+    // Campaign stays "sending" — a successor job is already scheduled, no manual resume needed
+    expect(result).toMatchObject({ finalStatus: "sending" });
   });
 
   it("re-enqueues with delay after sending when interval > 0 (interval sleep fix)", async () => {
@@ -515,7 +515,7 @@ describe("processSend", () => {
       expect.objectContaining({ campaignId: "camp-1" }),
       expect.objectContaining({ delay: 300_000 })
     );
-    expect(result).toMatchObject({ sentCount: 1, finalStatus: "paused" });
+    expect(result).toMatchObject({ sentCount: 1, finalStatus: "sending" });
   });
 
   it("sends all emails in one job when interval is 0 (burst mode, no re-enqueue)", async () => {

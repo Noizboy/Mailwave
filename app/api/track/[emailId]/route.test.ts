@@ -18,10 +18,11 @@ import { routeParams } from "@/test/api-helpers";
 
 const mocked = vi.mocked;
 
-function trackRequest(emailId: string, ip?: string): NextRequest {
+function trackRequest(emailId: string, ip?: string, userAgent?: string): NextRequest {
   const url = new URL(`http://localhost:3000/api/track/${emailId}?s=test-sig`);
   const headers: Record<string, string> = {};
   if (ip) headers["x-forwarded-for"] = ip;
+  if (userAgent) headers["user-agent"] = userAgent;
   return new NextRequest(url, { method: "GET", headers });
 }
 
@@ -76,6 +77,25 @@ describe("GET /api/track/[emailId]", () => {
     expect(overflow.headers.get("content-type")).toBe("image/gif");
     // The overflow request must NOT have recorded an open event.
     expect(prisma.deliveryEvent.create).toHaveBeenCalledTimes(60);
+  });
+
+  it.each([
+    ["Gmail", "Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)"],
+    ["Yahoo Mail", "Mozilla/5.0 (compatible; YahooMailProxy; +https://help.yahoo.com/kb/yahoo-mail-proxy-SLN28749.html)"],
+  ])("returns pixel but skips open event for %s image proxy", async (_name, ua) => {
+    mocked(prisma.campaignEmail.findUnique).mockResolvedValue({
+      id: "proxy-e1",
+      status: "sent",
+    } as never);
+
+    const res = await trackPixel(
+      trackRequest("proxy-e1", "203.0.113.1", ua),
+      routeParams({ emailId: "proxy-e1" })
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/gif");
+    expect(prisma.deliveryEvent.create).not.toHaveBeenCalled();
   });
 
   it("counts requests against the IP bucket independently per IP", async () => {
