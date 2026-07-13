@@ -228,15 +228,21 @@ export async function processSend(job: Job<SendCampaignJobData>) {
       const htmlBody = (email.body ?? "").replace(/\n/g, "<br>");
       const pixelUrl = `${appUrl}/api/track/${email.id}?s=${signEmailId(email.id)}`;
 
+      // Use base64 Content-Transfer-Encoding for the HTML part so that
+      // quoted-printable encoding never mangles '=' characters in the tracking
+      // pixel URL (CN-QP-001). With QP the '=' in '?s=<sig>' becomes '=3D',
+      // which corrupts the HMAC signature and silently breaks open tracking.
+      const htmlContent =
+        `<img src="${pixelUrl}" width="1" height="1" alt="" border="0" style="height:1px!important;width:1px!important;border-width:0!important;margin:0!important;padding:0!important" />` +
+        `<div style="font-family:sans-serif;font-size:14px;line-height:1.6">${htmlBody}</div>`;
+
       await transporter.sendMail({
         from: `"${smtpConfig.fromName ?? ""}" <${smtpConfig.fromEmail}>`,
         replyTo: smtpConfig.replyTo ?? undefined,
         to: email.contact.email,
         subject: email.subject ?? "(No subject)",
         text: email.body ?? "",
-        html:
-          `<img src="${pixelUrl}" width="1" height="1" alt="" border="0" style="height:1px!important;width:1px!important;border-width:0!important;margin:0!important;padding:0!important" />` +
-          `<div style="font-family:sans-serif;font-size:14px;line-height:1.6">${htmlBody}</div>`,
+        alternatives: [{ contentType: "text/html", encoding: "base64", content: htmlContent }],
       });
 
       await prisma.campaignEmail.update({
