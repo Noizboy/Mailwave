@@ -136,6 +136,7 @@ export function ReportsClient() {
   const { data: reportsData, isLoading: reportsLoading } = useQuery({
     queryKey: ["reports"],
     queryFn: fetchReports,
+    refetchInterval: 60_000,
   });
 
   const { data: emailsData, isLoading: emailsLoading } = useQuery<EmailsResponse>({

@@ -116,6 +116,10 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
   for (const member of members) {
     const { contact } = member;
 
+    // Stop processing if generation was cancelled externally via the UI
+    const fresh = await prisma.campaign.findFirst({ where: { id: campaignId }, select: { status: true } });
+    if (fresh?.status !== "generating") return { successCount, failCount };
+
     // Skip if already generated or deliberately skipped by the user
     const existing = existingByContact.get(contact.id);
     if (existing && (existing.status !== "pending" || existing.approvalStatus === "skipped")) continue;
@@ -230,9 +234,11 @@ async function _processGenerate(job: Job<GenerateCampaignJobData>, campaignId: s
     return { successCount: 0, failCount: 0 };
   }
 
-  // Transition campaign to pending_review
-  await prisma.campaign.update({
-    where: { id: campaignId },
+  // Transition campaign to pending_review — only if we still own the run
+  // (a concurrent cancel may have already changed the status, in which case
+  // updateMany is a safe no-op rather than overwriting the cancel).
+  await prisma.campaign.updateMany({
+    where: { id: campaignId, status: "generating" },
     data: {
       status: "pending_review",
       totalEmails: members.length,

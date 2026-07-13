@@ -161,7 +161,7 @@ describe("processSend", () => {
     });
   });
 
-  it("queries only approved, unsent emails excluding suppressed contacts", async () => {
+  it("queries only approved, unsent emails for subscribed contacts only", async () => {
     await processSend(fakeJob());
 
     expect(prisma.campaignEmail.findMany).toHaveBeenCalledWith(
@@ -169,10 +169,19 @@ describe("processSend", () => {
         where: expect.objectContaining({
           approvalStatus: "approved",
           status: { in: ["generated", "approved"] },
-          contact: { status: { not: "suppressed" } },
+          contact: { status: "subscribed" },
         }),
       })
     );
+  });
+
+  it("does not send to contacts marked unsubscribed or invalid after generation", async () => {
+    // The DB filter (contact: { status: "subscribed" }) handles exclusion — verify the query shape
+    // matches so that unsubscribed/invalid contacts changed between generate and send are skipped.
+    await processSend(fakeJob());
+
+    const call = mocked(prisma.campaignEmail.findMany).mock.calls[0][0] as { where: { contact: unknown } };
+    expect(call.where.contact).toEqual({ status: "subscribed" });
   });
 
   it("sends approved emails, records delivery events, and completes the campaign", async () => {

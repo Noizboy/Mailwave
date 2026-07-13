@@ -90,13 +90,13 @@ export async function processSend(job: Job<SendCampaignJobData>) {
   const sendingAccount = await prisma.sendingAccount.findUnique({ where: { userId } });
   const suppressAfterEmails = sendingAccount?.suppressAfterEmails ?? 3;
 
-  // Get approved emails not yet sent, excluding already-suppressed contacts
+  // Get approved emails not yet sent, excluding non-sendable contacts
   const pendingEmails = await prisma.campaignEmail.findMany({
     where: {
       campaignId,
       approvalStatus: "approved",
       status: { in: ["generated", "approved"] },
-      contact: { status: { not: "suppressed" } },
+      contact: { status: "subscribed" },
     },
     include: {
       contact: {
