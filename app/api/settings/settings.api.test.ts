@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 
 const verify = vi.fn();
+const suppressQueueAdd = vi.fn();
 
 vi.mock("@/lib/auth");
 vi.mock("@/lib/prisma");
@@ -29,6 +30,9 @@ vi.mock("@/lib/password-policy", () => ({
 vi.mock("nodemailer", () => ({
   default: { createTransport: vi.fn(() => ({ verify })) },
 }));
+vi.mock("@/lib/jobs/queue", () => ({
+  getSuppressContactsQueue: () => ({ add: suppressQueueAdd }),
+}));
 
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
@@ -39,7 +43,7 @@ import { GET as getSmtp, PUT as putSmtp } from "./smtp/route";
 import { POST as testSmtp } from "./smtp/test/route";
 import { GET as getAi, PUT as putAi } from "./ai/route";
 import { POST as changePassword } from "./account/password/route";
-import { GET as getLimits } from "./sending-limits/route";
+import { GET as getLimits, PUT as putLimits } from "./sending-limits/route";
 import { GET as getNotifPrefs, PATCH as patchNotifPrefs } from "./notification-preferences/route";
 
 const mocked = vi.mocked;
@@ -335,6 +339,89 @@ describe("api/settings", () => {
         hourlyLimit: 50,
         suppressAfterEmails: 3,
       });
+    });
+
+    it("returns stored values when configs exist", async () => {
+      mocked(prisma.smtpConfig.findUnique).mockResolvedValue({
+        dailyLimit: 200,
+        hourlyLimit: 20,
+      } as never);
+      mocked(prisma.sendingAccount.findUnique).mockResolvedValue({
+        suppressAfterEmails: 5,
+      } as never);
+
+      const body = await (await getLimits()).json();
+      expect(body).toEqual({ dailyLimit: 200, hourlyLimit: 20, suppressAfterEmails: 5 });
+    });
+  });
+
+  describe("PUT /api/settings/sending-limits", () => {
+    it("returns 401 when unauthenticated", async () => {
+      mockSession(null);
+      const res = await putLimits(
+        jsonRequest("/api/settings/sending-limits", { method: "PUT", body: { dailyLimit: 100 } })
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 400 on invalid input", async () => {
+      const res = await putLimits(
+        jsonRequest("/api/settings/sending-limits", { method: "PUT", body: { dailyLimit: -1 } })
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it("upserts smtp limits scoped to the user", async () => {
+      mocked(prisma.smtpConfig.upsert).mockResolvedValue({} as never);
+
+      const res = await putLimits(
+        jsonRequest("/api/settings/sending-limits", {
+          method: "PUT",
+          body: { dailyLimit: 300, hourlyLimit: 30 },
+        })
+      );
+
+      expect(res.status).toBe(200);
+      expect(prisma.smtpConfig.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: "user-1" },
+          create: expect.objectContaining({ dailyLimit: 300, hourlyLimit: 30 }),
+          update: expect.objectContaining({ dailyLimit: 300, hourlyLimit: 30 }),
+        })
+      );
+      expect(suppressQueueAdd).not.toHaveBeenCalled();
+    });
+
+    it("enqueues a deduplicated suppress job when suppressAfterEmails is set", async () => {
+      mocked(prisma.sendingAccount.upsert).mockResolvedValue({} as never);
+      suppressQueueAdd.mockResolvedValue({ id: "job-1" });
+
+      const res = await putLimits(
+        jsonRequest("/api/settings/sending-limits", {
+          method: "PUT",
+          body: { suppressAfterEmails: 5 },
+        })
+      );
+
+      expect(res.status).toBe(200);
+      expect(suppressQueueAdd).toHaveBeenCalledWith(
+        "apply-suppress-threshold",
+        { userId: "user-1", suppressAfterEmails: 5 },
+        expect.objectContaining({ jobId: "suppress-user-1" })
+      );
+    });
+
+    it("does not enqueue a suppress job when only smtp limits change", async () => {
+      mocked(prisma.smtpConfig.upsert).mockResolvedValue({} as never);
+
+      await putLimits(
+        jsonRequest("/api/settings/sending-limits", {
+          method: "PUT",
+          body: { dailyLimit: 100 },
+        })
+      );
+
+      expect(suppressQueueAdd).not.toHaveBeenCalled();
     });
   });
 
