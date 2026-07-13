@@ -6,6 +6,9 @@ All notable changes to Mailwave are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **Login / Signup — logo del sistema**: Reemplazado el ícono genérico de `lucide-react` (Mail) por el logo real del sistema (`public/logo.png`) en la pantalla de autenticación. Se eliminó el título "MailWave" duplicado, dejando solo el logo y el subtitle. La directiva CSP `upgrade-insecure-requests` se movió a producción únicamente para evitar que el navegador convierta peticiones HTTP a HTTPS en desarrollo.
+
 ### Added
 - **Campaign duplication** — Added a "Duplicate" action to the campaign list dropdown. Copying a campaign creates a new `pending` campaign named `"Copy of <original>"` with the same Campaign Details (`language`, `emailLength`), AI Instructions (`goal`, `product`, `cta`, `tone`, `systemPrompt`, `aiProvider`, `aiModel`), Sending Configuration (`intervalType`, `minInterval`, `maxInterval`, `dailyLimit`, `hourlyLimit`), and contact list. Runtime state (`scheduledAt`, counters, `activeSendRunId`, `startedAt`, `completedAt`) is never copied. Generated emails are not duplicated — the new campaign starts empty in `pending` status. If a campaign named `"Copy of <original>"` already exists the action shows an error toast.
 - **Completed campaigns are read-only** — Once a campaign reaches `completed` status all editing and re-use actions are blocked: "Re-Generate Emails", "Retry Failed", "Cancel", per-email Edit/Regenerate/Approve/Skip buttons, and the Edit controls on Campaign Details, AI Instructions, and Sending Configuration sections. The campaign can only be viewed or duplicated.
