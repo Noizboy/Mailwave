@@ -387,6 +387,18 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   };
 
   const handleSend = async () => {
+    if (allReviewed) {
+      const patch = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ready_to_send" }),
+      });
+      if (!patch.ok) {
+        const err = await patch.json().catch(() => ({}));
+        toast.error("Could not start sending", err.error ?? "Could not transition campaign to ready state.");
+        return;
+      }
+    }
     const res = await fetch(`/api/campaigns/${campaignId}/send`, { method: "POST" });
     if (res.ok) {
       toast.success("Sending started", "Emails are being delivered. Monitor progress on this page.");
