@@ -647,9 +647,10 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     { key: "failed_gen", label: `Failed (${failedGenerationEmails.length})` },
   ];
 
+  const sendableEmails = campaign.totalEmails - campaign.skippedCount;
   const percent =
-    campaign.totalEmails > 0
-      ? Math.round(((campaign.sentCount + campaign.failedCount + campaign.skippedCount) / campaign.totalEmails) * 100)
+    sendableEmails > 0
+      ? Math.round(((campaign.sentCount + campaign.failedCount) / sendableEmails) * 100)
       : 0;
 
   const generatedCount = campaign.emails.filter((e) => e.status === "generated").length;
