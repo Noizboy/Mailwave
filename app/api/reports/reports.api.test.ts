@@ -79,6 +79,44 @@ describe("api/dashboard + reports + notifications", () => {
       const res = await getReports();
       expect((await res.json()).summary.deliveryRate).toBe(0);
     });
+
+    it("counts an open when a scanner prefetch is followed by a genuine open", async () => {
+      const sentAt = new Date("2026-06-01T10:00:00Z");
+      mocked(prisma.contact.count).mockResolvedValue(0 as never);
+      mocked(prisma.campaign.count).mockResolvedValue(0 as never);
+      mocked(prisma.campaignEmail.count)
+        .mockResolvedValueOnce(1 as never)
+        .mockResolvedValueOnce(0 as never);
+      mocked(prisma.campaign.findMany).mockResolvedValue([
+        {
+          id: "camp-1",
+          name: "Launch",
+          status: "completed",
+          totalEmails: 1,
+          startedAt: sentAt,
+          completedAt: sentAt,
+          list: { name: "Subscribers" },
+          emails: [{ approvalStatus: "approved", status: "sent" }],
+        },
+      ] as never);
+      mocked(prisma.campaignEmail.findMany).mockResolvedValue([
+        {
+          id: "email-1",
+          campaignId: "camp-1",
+          sentAt,
+          deliveryEvents: [
+            { occurredAt: new Date(sentAt.getTime() + 5_000) },
+            { occurredAt: new Date(sentAt.getTime() + 20_000) },
+          ],
+        },
+      ] as never);
+
+      const res = await getReports();
+      const body = await res.json();
+
+      expect(body.summary).toMatchObject({ totalOpened: 1, openRate: 100 });
+      expect(body.campaigns[0]).toMatchObject({ openedCount: 1 });
+    });
   });
 
   describe("GET /api/reports/export", () => {

@@ -71,3 +71,5 @@ next-env.d.ts
 .claude/
 .opencode/
 .github/workflows/
+
+testsprite_tests\tmp\config.json

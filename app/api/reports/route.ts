@@ -47,9 +47,9 @@ export async function GET() {
       orderBy: { updatedAt: "desc" },
       take: 20,
     }),
-    // Fetch only sent emails that have at least one opened event, then include
-    // just the first event per email for the 15-second scanner filter (CN-002).
-    // This avoids loading every DeliveryEvent row for large accounts.
+    // Fetch only sent emails that have at least one opened event. Keep the same
+    // event window used by the campaign email view: an early scanner prefetch
+    // must not hide a later genuine open (CN-002).
     prisma.campaignEmail.findMany({
       where: {
         campaign: { userId },
@@ -65,7 +65,7 @@ export async function GET() {
           where: { eventType: "opened" },
           select: { occurredAt: true },
           orderBy: { occurredAt: "asc" },
-          take: 1,
+          take: 20,
         },
       },
     }),
@@ -75,18 +75,18 @@ export async function GET() {
   const failed = totalFailed;
   const deliveryRate = sent + failed > 0 ? Math.round((sent / (sent + failed)) * 100) : 0;
 
-  // Count genuine opens: first event per email must be >= 15 s after sentAt (CN-002).
-  // openedEvents is now a list of CampaignEmail rows (one per email) each carrying
-  // only their first opened DeliveryEvent, so no dedup loop is needed.
+  // Count genuine opens: any event per email must be >= 15 s after sentAt (CN-002).
+  // Each CampaignEmail row is already unique, so no dedup loop is needed.
   const OPEN_THRESHOLD_MS = 15_000;
   const openCountByCampaign: Record<string, number> = {};
 
   for (const email of openedEvents) {
-    const firstEvent = email.deliveryEvents[0];
+    const sentAt = email.sentAt;
     if (
-      email.sentAt != null &&
-      firstEvent != null &&
-      firstEvent.occurredAt.getTime() - email.sentAt.getTime() >= OPEN_THRESHOLD_MS
+      sentAt != null &&
+      email.deliveryEvents.some(
+        (event) => event.occurredAt.getTime() - sentAt.getTime() >= OPEN_THRESHOLD_MS
+      )
     ) {
       openCountByCampaign[email.campaignId] = (openCountByCampaign[email.campaignId] ?? 0) + 1;
     }

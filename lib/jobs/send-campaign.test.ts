@@ -197,10 +197,15 @@ describe("processSend", () => {
   });
 
   it("sends approved emails, records delivery events, and completes the campaign", async () => {
-    mocked(prisma.campaignEmail.findMany).mockResolvedValue([
-      approvedEmail("e1", "c1"),
-      approvedEmail("e2", "c2"),
-    ] as never);
+    mocked(prisma.campaignEmail.findMany)
+      .mockResolvedValueOnce([
+        approvedEmail("e1", "c1"),
+        approvedEmail("e2", "c2"),
+      ] as never)
+      .mockResolvedValueOnce([
+        { approvalStatus: "approved", status: "sent" },
+        { approvalStatus: "approved", status: "sent" },
+      ] as never);
 
     const result = await processSend(fakeJob());
 
@@ -231,7 +236,10 @@ describe("processSend", () => {
     );
     expect(prisma.notification.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ type: "campaign.sending_complete" }),
+        data: expect.objectContaining({
+          type: "campaign.sending_complete",
+          body: "2 emails delivered successfully.",
+        }),
       })
     );
   });

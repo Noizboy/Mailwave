@@ -661,7 +661,7 @@ export async function finalizeSendRun(args: {
         userId,
         type: "campaign.sending_complete",
         title: `"${campaignName}" finished sending`,
-        body: `${sentCount} email${sentCount !== 1 ? "s" : ""} delivered successfully.${failCount > 0 ? ` ${failCount} failed.` : ""}`,
+        body: `${emailMetrics.sentCount} email${emailMetrics.sentCount !== 1 ? "s" : ""} delivered successfully.${emailMetrics.failedCount > 0 ? ` ${emailMetrics.failedCount} failed.` : ""}`,
         entityType: "campaign",
         entityId: campaignId,
       },
