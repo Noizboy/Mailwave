@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getGenerateQueue } from "@/lib/jobs/queue";
+import { getAuthenticatedUser } from "@/lib/api/session";
+import { findOwnedCampaign } from "@/lib/api/ownership";
 
 export const runtime = "nodejs";
 
@@ -12,10 +13,10 @@ const CAMPAIGN_GENERATE_MAX = 3;
 const CAMPAIGN_GENERATE_WINDOW_MS = 60 * 1000;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rl = await checkRateLimit(`campaign-generate:${session.user.id}`, CAMPAIGN_GENERATE_MAX, CAMPAIGN_GENERATE_WINDOW_MS);
+  const rl = await checkRateLimit(`campaign-generate:${user.id}`, CAMPAIGN_GENERATE_MAX, CAMPAIGN_GENERATE_WINDOW_MS);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: `Too many generation requests. Try again in ${rl.retryAfterSeconds}s.` },
@@ -25,9 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params;
 
-  const campaign = await prisma.campaign.findFirst({
-    where: { id, userId: session.user.id },
-  });
+  const campaign = await findOwnedCampaign(id, user.id);
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (["generating", "sending", "paused"].includes(campaign.status)) {
@@ -39,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const aiConfig = await prisma.aiConfig.findFirst({
     where: {
-      userId: session.user.id,
+      userId: user.id,
       status: "connected",
       ...(campaign.aiProvider ? { provider: campaign.aiProvider } : {}),
     },
@@ -92,7 +91,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const queue = getGenerateQueue();
   const job = await queue.add(
     "generate",
-    { campaignId: campaign.id, userId: session.user.id },
+    { campaignId: campaign.id, userId: user.id },
     {
       attempts: 3,
       backoff: { type: "exponential", delay: 5000 },

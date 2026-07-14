@@ -20,9 +20,15 @@ test.describe("lists management", () => {
 
     // Back to the index and delete via the card menu
     await page.goto("/lists");
-    const card = page.locator("div", { has: page.getByRole("link", { name: listName }) }).last();
-    await card.getByRole("button").last().click(); // dropdown trigger (icon button)
+    const card = page
+      .getByRole("link", { name: listName })
+      .locator("xpath=ancestor::div[contains(@class, 'p-5')]");
+    await card.getByRole("button", { name: "List actions" }).click();
     await page.getByRole("menuitem", { name: "Delete" }).click();
+    await page
+      .getByRole("dialog", { name: `Delete \"${listName}\"?` })
+      .getByRole("button", { name: "Delete" })
+      .click();
 
     await expect(page.getByRole("link", { name: listName })).not.toBeVisible();
   });

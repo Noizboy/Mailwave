@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getAuthenticatedUser } from "@/lib/api/session";
+import { findOwnedList } from "@/lib/api/ownership";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
 
-  const list = await prisma.list.findFirst({ where: { id, userId: session.user.id } });
+  const list = await findOwnedList(id, user.id);
   if (!list) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { contactIds } = await req.json();
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Verify all contactIds belong to the authenticated user before adding
   const ownedContacts = await prisma.contact.findMany({
-    where: { id: { in: contactIds }, userId: session.user.id },
+    where: { id: { in: contactIds }, userId: user.id },
     select: { id: true },
   });
   const ownedIds = ownedContacts.map((c) => c.id);
@@ -35,12 +36,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
 
-  const list = await prisma.list.findFirst({ where: { id, userId: session.user.id } });
+  const list = await findOwnedList(id, user.id);
   if (!list) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { contactIds } = await req.json();

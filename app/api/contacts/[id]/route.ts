@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getAuthenticatedUser } from "@/lib/api/session";
+import { findOwnedContact } from "@/lib/api/ownership";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -17,13 +18,12 @@ const updateSchema = z.object({
 });
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
 
-  const contact = await prisma.contact.findFirst({
-    where: { id, userId: session.user.id },
+  const contact = await findOwnedContact(id, user.id, {
     include: {
       listMembers: { include: { list: { select: { id: true, name: true } } } },
       campaignEmails: {
@@ -39,14 +39,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
 
-  const contact = await prisma.contact.findFirst({
-    where: { id, userId: session.user.id },
-  });
+  const contact = await findOwnedContact(id, user.id);
   if (!contact) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (contact.status === "unsubscribed") {
@@ -69,13 +67,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
 
   await prisma.contact.deleteMany({
-    where: { id, userId: session.user.id },
+    where: { id, userId: user.id },
   });
   return NextResponse.json({ ok: true });
 }

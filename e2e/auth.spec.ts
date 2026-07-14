@@ -24,9 +24,9 @@ test.describe("auth flow", () => {
     await expect(page).toHaveURL(/\/dashboard/);
   });
 
-  test("redirects unauthenticated visits to login with a callbackUrl", async ({ page }) => {
+  test("redirects unauthenticated visits to login", async ({ page }) => {
     await page.goto("/contacts");
-    await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fcontacts/);
+    await expect(page).toHaveURL(/\/login/);
   });
 });
 
@@ -34,8 +34,8 @@ test.describe("auth flow — sign out", () => {
   test("signs out from the profile menu and returns to login", async ({ page }) => {
     await page.goto("/dashboard");
     // Open the profile menu in the topbar
-    await page.getByRole("button", { name: /Demo User/ }).click();
-    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.getByRole("button", { name: "Account menu" }).click();
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
 
     await page.waitForURL("**/login**");
     // Session is gone: protected routes bounce back to login

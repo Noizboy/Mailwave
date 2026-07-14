@@ -6,6 +6,16 @@ All notable changes to Mailwave are documented here.
 
 ## [Unreleased]
 
+### Refactoring
+- **Maintainability refactor** — Decomposed campaign detail, campaign list, contacts, settings, reports, import review, and campaign wizard clients into focused modules. Centralized campaign mutations, AI configuration resolution, authenticated ownership lookups, and route use cases. Split campaign generation and sending workers into explicit stages, with transactional delivery-result persistence.
+- **Seed data composition** — Split the demo seed into domain fixtures and builders while preserving repeatable local demo scenarios.
+
+### Security / Correctness
+- **Test-only local AI stub** — Added an exact-origin `SSRF_TEST_ALLOWLIST` for non-production E2E workers. Production ignores the variable unconditionally, retaining private, loopback, and metadata-host SSRF protections.
+
+### Tests
+- **Quality gate** — Added characterization coverage for campaign detail and settings, refreshed E2E contracts to current accessible UI, and verified `332` unit tests plus `18` E2E tests.
+
 ### Changed
 - **Login / Signup — logo del sistema**: Reemplazado el ícono genérico de `lucide-react` (Mail) por el logo real del sistema (`public/logo.png`) en la pantalla de autenticación. Se eliminó el título "MailWave" duplicado, dejando solo el logo y el subtitle. La directiva CSP `upgrade-insecure-requests` se movió a producción únicamente para evitar que el navegador convierta peticiones HTTP a HTTPS en desarrollo.
 

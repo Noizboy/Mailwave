@@ -9,6 +9,15 @@ vi.mock("@/lib/ai", () => ({
   buildSystemPrompt: vi.fn(() => "sys"),
   buildUserPrompt: vi.fn(() => "usr"),
   PROVIDER_BASE_URLS: {},
+  resolveAiConfig: vi.fn().mockResolvedValue({
+    ok: true,
+    config: {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      apiKey: "api-key",
+      baseUrl: undefined,
+    },
+  }),
 }));
 
 import { prisma } from "@/lib/prisma";

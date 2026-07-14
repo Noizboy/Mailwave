@@ -17,8 +17,8 @@ vi.mock("@/lib/ssrf", () => ({
   assertSafeHost: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
+vi.mock("@/lib/prisma", () => {
+  const prisma = {
     campaign: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     smtpConfig: { findUnique: vi.fn() },
     sendingAccount: { findUnique: vi.fn() },
@@ -27,8 +27,14 @@ vi.mock("@/lib/prisma", () => ({
     contact: { update: vi.fn() },
     notification: { create: vi.fn(), findFirst: vi.fn() },
     notificationPreference: { findMany: vi.fn() },
-  },
-}));
+  };
+  // Stages persist outcomes inside prisma.$transaction; run the callback
+  // against the same mocked client so per-model call assertions still hold.
+  (prisma as unknown as { $transaction: unknown }).$transaction = vi.fn(
+    async (cb: (tx: typeof prisma) => unknown) => cb(prisma)
+  );
+  return { prisma };
+});
 
 const queueAdd = vi.fn();
 vi.mock("./queue", () => ({
@@ -413,7 +419,10 @@ describe("processSend", () => {
   });
 
   // NOTIF-005: campaign_error notification on SMTP failure
-  it("creates a sending_failed notification on SMTP failure when campaign_error pref is on (default)", async () => {
+  it("creates a sending_failed notification on SMTP failure when campaign_error pref is on", async () => {
+    mocked(prisma.notificationPreference.findMany).mockResolvedValue([
+      { eventType: "campaign_error", inApp: true },
+    ] as never);
     mocked(prisma.smtpConfig.findUnique).mockResolvedValue({ ...smtpConfig, status: "failed" } as never);
 
     await expect(processSend(fakeJob())).rejects.toThrow();
@@ -435,7 +444,10 @@ describe("processSend", () => {
   });
 
   // NOTIF-006: email_bounced notification with debounce
-  it("creates an email_bounced notification on first bounce when pref is on (default)", async () => {
+  it("creates an email_bounced notification on first bounce when pref is on", async () => {
+    mocked(prisma.notificationPreference.findMany).mockResolvedValue([
+      { eventType: "email_bounced", inApp: true },
+    ] as never);
     mocked(prisma.campaignEmail.findMany).mockResolvedValue([
       approvedEmail("e1", "c1"),
     ] as never);
@@ -450,6 +462,9 @@ describe("processSend", () => {
   });
 
   it("suppresses a bounce notification within the debounce window", async () => {
+    mocked(prisma.notificationPreference.findMany).mockResolvedValue([
+      { eventType: "email_bounced", inApp: true },
+    ] as never);
     mocked(prisma.campaignEmail.findMany).mockResolvedValue([
       approvedEmail("e1", "c1"),
       approvedEmail("e2", "c2"),

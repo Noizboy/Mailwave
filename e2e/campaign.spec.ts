@@ -38,6 +38,18 @@ test.describe("campaign wizard → generation → review", () => {
     worker = spawn("npx", ["tsx", "--env-file=.env", "jobs/worker.ts"], {
       cwd: ROOT,
       shell: true,
+      env: {
+        ...process.env,
+        // Ensure the worker process is not treated as production so the
+        // SSRF_TEST_ALLOWLIST escape hatch is active (see lib/ssrf.ts).
+        NODE_ENV: "test",
+        // Allow the worker's resolveAiConfig → assertSafeHost to reach the
+        // local AI stub server. This bypass is dead-code in production
+        // (NODE_ENV === "production" → allowlist is never consulted).
+        // Only the exact stub base URL prefix is listed; all other private/
+        // loopback URLs continue to be rejected.
+        SSRF_TEST_ALLOWLIST: `http://localhost:${STUB_PORT}`,
+      },
       stdio: ["ignore", workerLog, workerLog],
     });
     // Wait for the stub to accept connections
@@ -90,7 +102,7 @@ test.describe("campaign wizard → generation → review", () => {
     await expect(page.getByText("AI Instructions").first()).toBeVisible();
     await page.getByPlaceholder(/discovery call/).fill("E2E demo goal");
     // systemPrompt is required — fill it so step-2 validation passes
-    await page.getByPlaceholder(/B2B cold email expert/).fill(
+    await page.getByPlaceholder(/Always open with a reference/).fill(
       "You are a B2B outreach expert. Write concise emails with a clear CTA."
     );
 
@@ -111,12 +123,13 @@ test.describe("campaign wizard → generation → review", () => {
 
     // Poll until the worker finishes and the campaign reaches pending_review.
     // The detail page fetches client-side, so give each reload a moment to render.
+    // Indicator: the "Approve All" button only renders when status === pending_review.
     await expect
       .poll(
         async () => {
           await page.reload();
           return page
-            .getByText("Review Emails")
+            .getByRole("button", { name: "Approve All" })
             .first()
             .waitFor({ state: "visible", timeout: 4_000 })
             .then(() => true)
@@ -127,8 +140,9 @@ test.describe("campaign wizard → generation → review", () => {
       .toBe(true);
 
     // --- Review + approve ---
-    await page.getByText("Review Emails").first().click();
-    await page.waitForURL("**/review");
+    // The EmailReview panel is embedded on the campaign detail page (no /review
+    // sub-route after MT-H1 refactor). The first email is auto-selected, so its
+    // subject is immediately visible in the preview panel.
     await expect(page.getByText("E2E Stub Subject").first()).toBeVisible();
 
     await page.getByRole("button", { name: "Approve All" }).click();

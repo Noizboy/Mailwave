@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { validatePassword } from "@/lib/password-policy";
+import { getAuthenticatedUser } from "@/lib/api/session";
 
 export const runtime = "nodejs";
 
@@ -13,8 +13,8 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
   const parsed = schema.safeParse(body);
@@ -36,18 +36,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: policy.reason ?? "Password is not strong enough." }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
+  const record = await prisma.user.findUnique({
+    where: { id: user.id },
     select: { passwordHash: true },
   });
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (!record) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+  const valid = await bcrypt.compare(currentPassword, record.passwordHash);
   if (!valid) return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
 
   const newHash = await bcrypt.hash(newPassword, 12);
   await prisma.user.update({
-    where: { id: session.user.id },
+    where: { id: user.id },
     data: { passwordHash: newHash },
   });
 

@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
 import { prisma } from "@/lib/prisma";
+import { getAuthenticatedUser } from "@/lib/api/session";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const userId = session.user.id;
+  const userId = user.id;
 
   const [
     totalContacts,

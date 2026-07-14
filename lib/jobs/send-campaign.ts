@@ -1,13 +1,24 @@
 import { Worker, Job } from "bullmq";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/crypto";
-import { assertSafeHost } from "@/lib/ssrf";
-import nodemailer from "nodemailer";
-import { QUEUE_NAMES, getSendQueue } from "./queue";
+import { QUEUE_NAMES } from "./queue";
 import { getNotifPrefs } from "./notification-prefs";
-import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
-import { signEmailId } from "@/lib/track-sign";
+import {
+  claimSendRun,
+  loadSmtpTransport,
+  loadSuppressAfterEmails,
+  loadPendingEmails,
+  loadRateLimitCounts,
+  decideContinuation,
+  sendOneEmail,
+  persistSendSuccess,
+  persistSendFailure,
+  persistSkippedEmail,
+  recordBounceNotificationIfAllowed,
+  reenqueueSend,
+  applyInterval,
+  finalizeSendRun,
+} from "./send-campaign-stages";
 
 export interface SendCampaignJobData {
   campaignId: string;
@@ -15,435 +26,150 @@ export interface SendCampaignJobData {
   sendRunId?: string;
 }
 
-export async function processSend(job: Job<SendCampaignJobData>) {
+/**
+ * Result handed back to BullMQ. The union is flattened to a single object with
+ * optional fields so callers can read counters and status without narrowing —
+ * matching the original inferred shape — while the runtime value carries only
+ * the fields the path actually produced.
+ */
+export type SendRunResult = {
+  skipped?: boolean;
+  reason?: string;
+  sentCount?: number;
+  failCount?: number;
+  finalStatus?: string;
+};
+
+/**
+ * Worker entry point. The flow is expressed as a short sequence of atomic
+ * stages:
+ *   1. Claim the send run (atomic ownership transfer).
+ *   2. For each pending email, decide whether to continue (pacing, rate-limit,
+ *      suppression, pause/stale checks).
+ *   3. Send one email via SMTP (never throws — returns an outcome).
+ *   4. Persist the outcome inside a transaction so counters, email state, and
+ *      delivery events cannot diverge on an intermediate write failure.
+ * The orchestrator owns the loop, progress reporting, re-enqueue side effects,
+ * and final run reconciliation.
+ */
+export async function processSend(job: Job<SendCampaignJobData>): Promise<SendRunResult> {
   const { campaignId, userId } = job.data;
   const sendRunId = job.data.sendRunId ?? randomUUID();
 
-  const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, userId },
-  });
-  if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
-  if (!["ready_to_send", "paused", "sending"].includes(campaign.status)) {
-    return { skipped: true, reason: `Campaign status is '${campaign.status}', not ready` };
+  // --- Stage 1: Claim the send run ---
+  const claim = await claimSendRun(campaignId, userId, sendRunId);
+  if (!claim.claimed) {
+    return { skipped: true, reason: claim.reason };
   }
+  const campaign = claim.campaign;
 
-  const claim = await prisma.campaign.updateMany({
-    where: {
-      id: campaignId,
-      userId,
-      status: { in: ["ready_to_send", "paused", "sending"] },
-      OR: [
-        { activeSendRunId: sendRunId },
-        { activeSendRunId: null },
-      ],
-    },
-    data: {
-      status: "sending",
-      activeSendRunId: sendRunId,
-      startedAt: campaign.startedAt ?? new Date(),
-      nextSendAt: campaign.nextSendAt ?? new Date(),
-    },
-  });
-  if (claim.count === 0) {
-    return { skipped: true, reason: "A newer send run already owns this campaign" };
-  }
-
-  // Fetch notification prefs once — used across the entire job
+  // Fetch notification prefs once — used across the entire job.
   const prefs = await getNotifPrefs(userId, ["campaign_complete", "campaign_error", "email_bounced"]);
 
-  // Get SMTP config
-  const smtpConfig = await prisma.smtpConfig.findUnique({ where: { userId } });
-  if (!smtpConfig || !smtpConfig.encryptedPassword || smtpConfig.status !== "connected") {
-    await prisma.campaign.updateMany({
-      where: { id: campaignId, activeSendRunId: sendRunId },
-      data: { status: "failed", activeSendRunId: null, nextSendAt: null },
-    });
-
-    if (prefs.campaign_error) {
-      await prisma.notification.create({
-        data: {
-          userId,
-          type: "campaign.sending_failed",
-          title: "Campaign failed",
-          body: `Campaign "${campaign.name}" could not be sent — SMTP is not configured or connected.`,
-          entityType: "campaign",
-          entityId: campaignId,
-        },
-      });
-    }
-
-    throw new Error("SMTP not configured or not connected");
+  // --- Setup: validate SMTP, build transporter, load sending context ---
+  const smtp = await loadSmtpTransport(userId, campaignId, sendRunId, campaign.name, prefs);
+  if (!smtp.ok) {
+    throw smtp.error;
   }
+  const { smtpSettings, transporter } = smtp;
 
-  // Re-validate the SMTP host at send time (not just at save time) to close the
-  // DNS-rebinding / TOCTOU window: a host that resolved to a public IP when
-  // saved could later point at an internal/metadata address (CN-005, CWE-918).
-  const hostCheck = await assertSafeHost(smtpConfig.host ?? "");
-  if (!hostCheck.ok) {
-    await prisma.campaign.updateMany({
-      where: { id: campaignId, activeSendRunId: sendRunId },
-      data: { status: "failed", activeSendRunId: null, nextSendAt: null },
-    });
-    if (prefs.campaign_error) {
-      await prisma.notification.create({
-        data: {
-          userId,
-          type: "campaign.sending_failed",
-          title: "Campaign failed",
-          body: `Campaign "${campaign.name}" could not be sent — the SMTP host is not allowed.`,
-          entityType: "campaign",
-          entityId: campaignId,
-        },
-      });
-    }
-    throw new Error(`SMTP host rejected: ${hostCheck.reason ?? "unsafe host"}`);
-  }
-
-  const smtpPassword = decrypt(smtpConfig.encryptedPassword);
-  const transporter = nodemailer.createTransport({
-    host: smtpConfig.host!,
-    port: smtpConfig.port ?? 587,
-    secure: smtpConfig.encryption === "ssl",
-    auth: { user: smtpConfig.username!, pass: smtpPassword },
-    // Never disable certificate validation — see CN-007. The "none" mode
-    // means no TLS is used; for "tls"/"ssl" the default validation applies.
-    connectionTimeout: 10_000,
-    socketTimeout: 30_000,
-  });
-
-  // Get sending limits for this user
-  const sendingAccount = await prisma.sendingAccount.findUnique({ where: { userId } });
-  const suppressAfterEmails = sendingAccount?.suppressAfterEmails ?? 3;
-
-  // Get approved emails not yet sent, excluding non-sendable contacts
-  const pendingEmails = await prisma.campaignEmail.findMany({
-    where: {
-      campaignId,
-      approvalStatus: "approved",
-      status: { in: ["generated", "approved"] },
-      contact: { status: "subscribed" },
-    },
-    include: {
-      contact: {
-        select: { id: true, email: true, firstName: true, lastName: true, emailsSentCount: true },
-      },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const suppressAfterEmails = await loadSuppressAfterEmails(userId);
+  const pendingEmails = await loadPendingEmails(campaignId);
+  const rateLimitCounts = await loadRateLimitCounts(userId);
+  // Capture the window starts once so the rate-limit decision uses the same
+  // boundaries that produced the snapshot counts above.
+  const rateLimitWindowStart = {
+    hourAgo: new Date(Date.now() - 3600_000),
+    dayAgo: new Date(Date.now() - 86_400_000),
+  };
 
   let sentCount = 0;
   let failCount = 0;
   let rateLimitResumeAt: Date | null = null;
   // True when we re-enqueued a continuation job (interval or rate-limit); in
-  // that case the campaign should stay "sending" — not flip to "paused" — so
-  // the UI doesn't show a spurious "Resume Sending" button between sends.
+  // that case the campaign stays "sending" — not "paused" — so the UI doesn't
+  // show a spurious "Resume Sending" button between sends.
   let reEnqueuedContinuation = false;
-
-  // Read rate-limit counts once before the loop and track them locally.
-  // Each job sends at most one email before re-enqueueing, so the counts stay
-  // accurate across the single send performed this run.
-  const now0 = new Date();
-  const hourAgo0 = new Date(now0.getTime() - 3600000);
-  const dayAgo0 = new Date(now0.getTime() - 86400000);
-  let sentLastHour = await prisma.deliveryEvent.count({
-    where: { campaignEmail: { campaign: { userId } }, eventType: "sent", occurredAt: { gte: hourAgo0 } },
-  });
-  let sentLastDay = await prisma.deliveryEvent.count({
-    where: { campaignEmail: { campaign: { userId } }, eventType: "sent", occurredAt: { gte: dayAgo0 } },
-  });
 
   for (let index = 0; index < pendingEmails.length; index++) {
     const email = pendingEmails[index];
-    // Re-check campaign status in case it was paused
-    let freshCampaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
-    if (!freshCampaign || freshCampaign.status === "paused" || freshCampaign.activeSendRunId !== sendRunId) break;
 
-    const nextSendTargetMs = freshCampaign.nextSendAt ? new Date(freshCampaign.nextSendAt).getTime() : Date.now();
-    const waitMs = nextSendTargetMs - Date.now();
-    if (waitMs > 500) {
-      // Re-enqueue with delay instead of blocking the worker thread
-      const newSendRunId = randomUUID();
-      await getSendQueue().add(
-        "send",
-        { campaignId, userId, sendRunId: newSendRunId },
-        {
-          delay: waitMs,
-          jobId: `send-${campaignId}-${newSendRunId}`,
-          attempts: 1,
-          removeOnComplete: { age: 3600 },
-          removeOnFail: { age: 86400 },
-        }
-      );
-      reEnqueuedContinuation = true;
+    // --- Stage 2: continuation decision ---
+    const decision = await decideContinuation({
+      campaignId,
+      sendRunId,
+      email,
+      suppressAfterEmails,
+      smtpSettings,
+      rateLimitCounts,
+      rateLimitWindowStart,
+    });
+
+    if (decision.action === "stop") {
       break;
     }
 
-    if (sentLastHour >= smtpConfig.hourlyLimit || sentLastDay >= smtpConfig.dailyLimit) {
-      // Compute when each exceeded limit clears (oldest event in window + window size)
-      const resumeTimes: number[] = [];
-
-      if (sentLastHour >= smtpConfig.hourlyLimit) {
-        const oldest = await prisma.deliveryEvent.findFirst({
-          where: {
-            campaignEmail: { campaign: { userId } },
-            eventType: "sent",
-            occurredAt: { gte: hourAgo0 },
-          },
-          orderBy: { occurredAt: "asc" },
-        });
-        if (oldest) resumeTimes.push(oldest.occurredAt.getTime() + 3600000 + 1000);
-      }
-
-      if (sentLastDay >= smtpConfig.dailyLimit) {
-        const oldest = await prisma.deliveryEvent.findFirst({
-          where: {
-            campaignEmail: { campaign: { userId } },
-            eventType: "sent",
-            occurredAt: { gte: dayAgo0 },
-          },
-          orderBy: { occurredAt: "asc" },
-        });
-        if (oldest) resumeTimes.push(oldest.occurredAt.getTime() + 86400000 + 1000);
-      }
-
-      rateLimitResumeAt = new Date(
-        resumeTimes.length > 0 ? Math.max(...resumeTimes) : Date.now() + 3600000
-      );
-
-      const newSendRunId = randomUUID();
-      const delay = Math.max(0, rateLimitResumeAt.getTime() - Date.now());
-      await getSendQueue().add(
-        "send",
-        { campaignId, userId, sendRunId: newSendRunId },
-        {
-          delay,
-          jobId: `send-${campaignId}-${newSendRunId}`,
-          attempts: 1,
-          removeOnComplete: { age: 3600 },
-          removeOnFail: { age: 86400 },
-        }
-      );
-
-      reEnqueuedContinuation = true;
-      break;
-    }
-
-    // Check per-contact send cap — skip if at or over limit
-    if (email.contact.emailsSentCount >= suppressAfterEmails) {
-      await prisma.campaignEmail.update({
-        where: { id: email.id },
-        data: { status: "skipped", errorReason: "Contact suppressed: send limit reached" },
-      });
-      await prisma.campaign.update({
-        where: { id: campaignId },
-        data: { skippedCount: { increment: 1 } },
-      });
+    if (decision.action === "skip") {
+      // --- Stage 4 (skip path): persist the skip transactionally ---
+      await persistSkippedEmail(campaignId, email);
       continue;
     }
 
-    try {
-      const appUrl = process.env.AUTH_URL ?? "";
-      const htmlBody = (email.body ?? "").replace(/\n/g, "<br>");
-      const pixelUrl = `${appUrl}/api/track/${email.id}?s=${signEmailId(email.id)}`;
-
-      // nodemailer's `encoding: "base64"` on an alternatives entry means
-      // "this content string is already base64-encoded" — it calls
-      // Buffer.from(content, "base64") internally. Passing a plain HTML string
-      // with encoding:"base64" would produce garbage bytes (CN-QP-001).
-      // Pre-encoding the HTML as base64 makes the contract explicit: nodemailer
-      // decodes it to the original bytes and then sends the part with
-      // Content-Transfer-Encoding: base64, which avoids QP encoding '=' as '=3D'
-      // in the tracking pixel URL.
-      const htmlContent =
-        `<img src="${pixelUrl}" width="1" height="1" alt="" border="0" style="height:1px!important;width:1px!important;border-width:0!important;margin:0!important;padding:0!important" />` +
-        `<div style="font-family:sans-serif;font-size:14px;line-height:1.6">${htmlBody}</div>`;
-      const htmlBase64 = Buffer.from(htmlContent, "utf-8").toString("base64");
-
-      await transporter.sendMail({
-        from: `"${smtpConfig.fromName ?? ""}" <${smtpConfig.fromEmail}>`,
-        replyTo: smtpConfig.replyTo ?? undefined,
-        to: email.contact.email,
-        subject: email.subject ?? "(No subject)",
-        text: email.body ?? "",
-        alternatives: [{ contentType: "text/html; charset=utf-8", encoding: "base64", content: htmlBase64 }],
-      });
-
-      await prisma.campaignEmail.update({
-        where: { id: email.id },
-        data: { status: "sent", sentAt: new Date() },
-      });
-
-      await prisma.deliveryEvent.create({
-        data: {
-          campaignEmailId: email.id,
-          eventType: "sent",
-          occurredAt: new Date(),
-        },
-      });
-
-      // Increment contact sent count atomically and auto-suppress when the
-      // limit is reached. Uses DB-side increment to stay correct under
-      // concurrent workers (avoids read-modify-write races that could
-      // otherwise bypass the suppression threshold).
-      const projectedNewCount = email.contact.emailsSentCount + 1;
-      await prisma.contact.update({
-        where: { id: email.contact.id },
-        data: {
-          emailsSentCount: { increment: 1 },
-          ...(projectedNewCount >= suppressAfterEmails ? { status: "suppressed" } : {}),
-        },
-      });
-
-      sentCount++;
-      sentLastHour++;
-      sentLastDay++;
-
-      await prisma.campaign.update({
-        where: { id: campaignId },
-        data: { sentCount: { increment: 1 } },
-      });
-    } catch (err) {
-      await prisma.campaignEmail.update({
-        where: { id: email.id },
-        data: {
-          status: "failed",
-          errorReason: err instanceof Error ? err.message : "Unknown error",
-          retryCount: { increment: 1 },
-        },
-      });
-      failCount++;
-
-      await prisma.campaign.update({
-        where: { id: campaignId },
-        data: { failedCount: { increment: 1 } },
-      });
-
-      // NOTIF-006: one bounce notification per campaign per hour
-      if (prefs.email_bounced) {
-        const oneHourAgo = new Date(Date.now() - 3600000);
-        const recentBounce = await prisma.notification.findFirst({
-          where: {
-            userId,
-            type: "delivery.email_bounced",
-            entityType: "campaign",
-            entityId: campaignId,
-            createdAt: { gte: oneHourAgo },
-          },
-        });
-        if (!recentBounce) {
-          await prisma.notification.create({
-            data: {
-              userId,
-              type: "delivery.email_bounced",
-              title: "Email bounce detected",
-              body: `A delivery failed for campaign "${campaign.name}".`,
-              entityType: "campaign",
-              entityId: campaignId,
-            },
-          });
-        }
-      }
+    if (decision.action === "reenqueue") {
+      await reenqueueSend(campaignId, userId, decision.newSendRunId, decision.delay);
+      rateLimitResumeAt = decision.rateLimitResumeAt;
+      reEnqueuedContinuation = true;
+      break;
     }
 
-    // Apply interval between sends
-    const interval = campaign.intervalType === "random"
-      ? Math.floor(Math.random() * (campaign.maxInterval - campaign.minInterval + 1) + campaign.minInterval)
-      : campaign.minInterval;
+    // --- Stage 3: send one email ---
+    const outcome = await sendOneEmail(email, transporter, smtpSettings);
 
-    const hasMorePendingEmails = index < pendingEmails.length - 1;
-    const intervalMs = interval * 60 * 1000;
+    // --- Stage 4: persist the outcome transactionally ---
+    if (outcome.status === "sent") {
+      await persistSendSuccess(campaignId, email, suppressAfterEmails);
+      sentCount++;
+      rateLimitCounts.sentLastHour++;
+      rateLimitCounts.sentLastDay++;
+    } else {
+      await persistSendFailure(campaignId, email, outcome.error);
+      failCount++;
+      // Bounce notification is debounced and lives outside the delivery
+      // transaction so a notification issue cannot roll back delivery state.
+      await recordBounceNotificationIfAllowed(userId, campaignId, campaign.name, prefs);
+    }
 
+    // Apply the inter-send interval: update `nextSendAt` and re-enqueue a
+    // continuation job when the interval is long enough to avoid blocking.
+    const interval = applyInterval(campaign, index, pendingEmails.length);
     await prisma.campaign.update({
       where: { id: campaignId },
-      data: {
-        nextSendAt: hasMorePendingEmails ? new Date(Date.now() + intervalMs) : null,
-      },
+      data: interval.nextSendAtUpdate,
     });
 
-    await job.updateProgress(Math.round(((sentCount + failCount) / pendingEmails.length) * 100));
+    await job.updateProgress(
+      Math.round(((sentCount + failCount) / pendingEmails.length) * 100)
+    );
 
-    if (hasMorePendingEmails && intervalMs > 500) {
-      // Re-enqueue with delay instead of blocking the worker thread
-      const newSendRunId = randomUUID();
-      await getSendQueue().add(
-        "send",
-        { campaignId, userId, sendRunId: newSendRunId },
-        {
-          delay: intervalMs,
-          jobId: `send-${campaignId}-${newSendRunId}`,
-          attempts: 1,
-          removeOnComplete: { age: 3600 },
-          removeOnFail: { age: 86400 },
-        }
-      );
+    if (interval.reenqueue) {
+      await reenqueueSend(campaignId, userId, interval.newSendRunId!, interval.delayMs!);
       reEnqueuedContinuation = true;
       break;
     }
   }
 
-  // Check if all done
-  const remaining = await prisma.campaignEmail.count({
-    where: {
-      campaignId,
-      approvalStatus: "approved",
-      status: { in: ["generated", "approved"] },
-    },
+  // --- Finalize: reconcile metrics, detect stale runs, set terminal status ---
+  return await finalizeSendRun({
+    campaignId,
+    sendRunId,
+    userId,
+    campaignName: campaign.name,
+    sentCount,
+    failCount,
+    rateLimitResumeAt,
+    reEnqueuedContinuation,
+    prefs,
   });
-  const emailMetrics = deriveCampaignMetrics(
-    await prisma.campaignEmail.findMany({
-      where: { campaignId },
-      select: { approvalStatus: true, status: true },
-    })
-  );
-
-  const latestCampaign = await prisma.campaign.findUnique({
-    where: { id: campaignId },
-    select: { activeSendRunId: true },
-  });
-  if (latestCampaign?.activeSendRunId !== sendRunId) {
-    return { sentCount, failCount, finalStatus: "stale" };
-  }
-
-  // Stay "sending" when a continuation job was enqueued (interval or rate-limit
-  // wait); only flip to "paused" when the campaign truly needs manual action.
-  const finalStatus = remaining === 0 ? "completed" : reEnqueuedContinuation ? "sending" : "paused";
-
-  await prisma.campaign.updateMany({
-    where: { id: campaignId, activeSendRunId: sendRunId },
-    data: {
-      status: finalStatus,
-      activeSendRunId: null,
-      sentCount: emailMetrics.sentCount,
-      failedCount: emailMetrics.failedCount,
-      skippedCount: emailMetrics.skippedCount,
-      pendingCount: emailMetrics.pendingCount,
-      // For rate-limit: use the computed resume time.
-    // For completion or pause: clear it.
-    // For interval re-enqueue: leave it as-is (already set in the loop above).
-    ...(rateLimitResumeAt !== null
-      ? { nextSendAt: rateLimitResumeAt }
-      : finalStatus === "sending"
-      ? {}
-      : { nextSendAt: null }),
-      ...(finalStatus === "completed" ? { completedAt: new Date() } : {}),
-    },
-  });
-
-  // NOTIF-003: respect campaign_complete preference
-  if (finalStatus === "completed" && prefs.campaign_complete) {
-    await prisma.notification.create({
-      data: {
-        userId,
-        type: "campaign.sending_complete",
-        title: `"${campaign.name}" finished sending`,
-        body: `${sentCount} email${sentCount !== 1 ? "s" : ""} delivered successfully.${failCount > 0 ? ` ${failCount} failed.` : ""}`,
-        entityType: "campaign",
-        entityId: campaignId,
-      },
-    });
-  }
-
-  return { sentCount, failCount, finalStatus };
 }
 
 export function startSendWorker() {

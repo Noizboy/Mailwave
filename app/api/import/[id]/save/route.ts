@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateEmail } from "@/lib/csv";
 import { z } from "zod";
+import { getAuthenticatedUser } from "@/lib/api/session";
+import { findOwnedList } from "@/lib/api/ownership";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userId = session.user.id;
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = user.id;
 
   const { id } = await params;
 
   const importRecord = await prisma.import.findFirst({
-    where: { id, userId: userId },
+    where: { id, userId },
     include: { rows: { orderBy: { rowIndex: "asc" } } },
   });
   if (!importRecord) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -39,8 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // members to it — otherwise a caller could inject contacts into another
   // user's list (IDOR).
   if (resolvedListId) {
-    const owned = await prisma.list.findFirst({
-      where: { id: resolvedListId, userId },
+    const owned = await findOwnedList(resolvedListId, userId, {
       select: { id: true },
     });
     if (!owned) return NextResponse.json({ error: "List not found" }, { status: 404 });

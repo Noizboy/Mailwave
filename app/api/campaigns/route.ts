@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
 import { prisma } from "@/lib/prisma";
 import { getSendQueue } from "@/lib/jobs/queue";
+import { getAuthenticatedUser } from "@/lib/api/session";
+import { findOwnedList } from "@/lib/api/ownership";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -32,11 +33,11 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const campaigns = await prisma.campaign.findMany({
-    where: { userId: session.user.id },
+    where: { userId: user.id },
     include: {
       list: { select: { id: true, name: true } },
       emails: {
@@ -58,8 +59,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
   const parsed = createSchema.safeParse(body);
@@ -76,15 +77,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Verify list belongs to user
-  const list = await prisma.list.findFirst({
-    where: { id: rest.listId, userId: session.user.id },
+  // Verify list belongs to the authenticated user before counting its members.
+  const list = await findOwnedList(rest.listId, user.id, {
     include: { _count: { select: { members: true } } },
   });
   if (!list) return NextResponse.json({ error: "List not found" }, { status: 404 });
 
   const duplicate = await prisma.campaign.findFirst({
-    where: { userId: session.user.id, name: rest.name },
+    where: { userId: user.id, name: rest.name },
     select: { id: true },
   });
   if (duplicate) {
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   const campaign = await prisma.campaign.create({
     data: {
       ...rest,
-      userId: session.user.id,
+      userId: user.id,
       intervalType: intervalType as "fixed" | "random",
       ...(scheduledAt ? { scheduledAt: new Date(scheduledAt) } : {}),
       ...(aiProvider ? { aiProvider } : {}),
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
       const queue = getSendQueue();
       await queue.add(
         "send",
-        { campaignId: campaign.id, userId: session.user.id },
+        { campaignId: campaign.id, userId: user.id },
         {
           delay,
           jobId: `scheduled-send-${campaign.id}`,

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import nodemailer from "nodemailer";
+import { getAuthenticatedUser } from "@/lib/api/session";
 
 function humanizeSmtpError(raw: string): string {
   if (/ECONNREFUSED/i.test(raw)) return "Connection refused. Check the hostname and port.";
@@ -25,10 +25,10 @@ const SMTP_TEST_MAX = 5;
 const SMTP_TEST_WINDOW_MS = 60 * 1000;
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rl = await checkRateLimit(`smtp-test:${session.user.id}`, SMTP_TEST_MAX, SMTP_TEST_WINDOW_MS);
+  const rl = await checkRateLimit(`smtp-test:${user.id}`, SMTP_TEST_MAX, SMTP_TEST_WINDOW_MS);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: `Too many SMTP test requests. Try again in ${rl.retryAfterSeconds}s.` },
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const config = await prisma.smtpConfig.findUnique({ where: { userId: session.user.id } });
+  const config = await prisma.smtpConfig.findUnique({ where: { userId: user.id } });
   if (!config || !config.host || !config.encryptedPassword) {
     return NextResponse.json({ error: "SMTP not configured" }, { status: 422 });
   }
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
   }
 
   await prisma.smtpConfig.update({
-    where: { userId: session.user.id },
+    where: { userId: user.id },
     data: {
       status: success ? "connected" : "failed",
       testedAt: new Date(),

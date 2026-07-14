@@ -8,6 +8,24 @@ import net from "node:net";
  * IP ranges, and rejects raw-IP inputs in those ranges directly. This prevents
  * an authenticated user from pointing the server at internal services or
  * cloud-metadata endpoints (CN-005, CWE-918).
+ *
+ * Test-only escape hatch (SSRF_TEST_ALLOWLIST)
+ * -------------------------------------------
+ * In non-production environments only (NODE_ENV !== "production"), the env var
+ * SSRF_TEST_ALLOWLIST may contain a comma-separated list of URL origins
+ * that bypass the SSRF check. This is **intentionally dead-code in production**
+ * (the guard is an unconditional early-return, not a loose flag). It exists
+ * solely to let the E2E test worker reach the local AI stub server without
+ * routing that worker through the NODE_ENV=development shortcut (which would
+ * disable all checks, not just the stub).
+ *
+ * Security properties that are preserved in production:
+ *   - localhost / 127.x / ::1 remain rejected.
+ *   - All private/reserved IP ranges remain rejected.
+ *   - The variable is never read when NODE_ENV === "production".
+ *   - A non-empty allowlist in a non-production environment only bypasses
+ *     origins that exactly match a listed origin — all other hosts
+ *     still go through the full DNS-resolution check.
  */
 
 const BLOCKED_PREFIXES = [
@@ -56,6 +74,34 @@ function isBlockedIp(ip: string): boolean {
   return isBlockedIPv4(ip) || isBlockedIPv6(ip);
 }
 
+/**
+ * Returns true when `rawHost` has an origin listed in SSRF_TEST_ALLOWLIST.
+ * Dead-code in production: always returns false when NODE_ENV === "production".
+ * The allowlist is read once per call so hot-reloaded tests pick up changes,
+ * but the production guard is evaluated first.
+ */
+function isTestAllowlisted(rawHost: string): boolean {
+  // Hard wall: never consult the allowlist in production.
+  if (process.env.NODE_ENV === "production") return false;
+
+  const raw = process.env.SSRF_TEST_ALLOWLIST ?? "";
+  if (!raw.trim()) return false;
+
+  let origin: string;
+  try {
+    origin = new URL(rawHost).origin;
+  } catch {
+    return false;
+  }
+
+  const origins = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  return origins.includes(origin);
+}
+
 export interface SsrfCheckResult {
   ok: boolean;
   reason?: string;
@@ -73,6 +119,13 @@ export async function assertSafeHost(rawHost: string): Promise<SsrfCheckResult> 
 
   // In development, allow localhost and private IPs (e.g. Ollama at localhost:11434).
   if (process.env.NODE_ENV === "development") {
+    return { ok: true };
+  }
+
+  // Test-only allowlist: bypass for explicitly whitelisted hosts/URLs in non-production
+  // environments (e.g. the local AI stub server used by E2E tests). Never active in
+  // production — isTestAllowlisted hard-returns false when NODE_ENV === "production".
+  if (isTestAllowlisted(rawHost)) {
     return { ok: true };
   }
 

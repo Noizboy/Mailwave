@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const anthropicCreate = vi.fn();
-const openaiCreate = vi.fn();
+const { anthropicCreate, openaiCreate, assertSafeHostMock } = vi.hoisted(() => ({
+  anthropicCreate: vi.fn(),
+  openaiCreate: vi.fn(),
+  assertSafeHostMock: vi.fn(),
+}));
 
 vi.mock("@anthropic-ai/sdk", () => ({
   default: vi.fn(function () {
@@ -16,9 +19,17 @@ vi.mock("openai", () => ({
   }),
 }));
 
+vi.mock("@/lib/crypto", () => ({
+  decrypt: vi.fn((c: string) => `decrypted:${c}`),
+}));
+
+vi.mock("@/lib/ssrf", () => ({
+  assertSafeHost: assertSafeHostMock,
+}));
+
 const openaiConstructorOpts: { baseURL?: string }[] = [];
 
-import { generateEmail, buildSystemPrompt, buildUserPrompt } from "./ai";
+import { generateEmail, buildSystemPrompt, buildUserPrompt, resolveAiConfig } from "./ai";
 
 const VALID_JSON = JSON.stringify({
   subject: "Hi Alice",
@@ -160,5 +171,113 @@ describe("buildUserPrompt", () => {
   it("omits the custom-fields block when empty", () => {
     const prompt = buildUserPrompt({ email: "x@y.com", customFields: {} });
     expect(prompt).not.toContain("Custom Fields:");
+  });
+});
+
+describe("resolveAiConfig", () => {
+  const baseRaw = {
+    provider: "openai",
+    model: "gpt-4o-mini",
+    encryptedApiKey: "enc-key",
+    baseUrl: null,
+  };
+
+  beforeEach(() => {
+    assertSafeHostMock.mockReset();
+    assertSafeHostMock.mockResolvedValue({ ok: true });
+  });
+
+  it("returns a resolved config with decrypted key, model, and undefined base URL", async () => {
+    const result = await resolveAiConfig(baseRaw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.provider).toBe("openai");
+    expect(result.config.model).toBe("gpt-4o-mini");
+    expect(result.config.apiKey).toBe("decrypted:enc-key");
+    expect(result.config.baseUrl).toBeUndefined();
+  });
+
+  it("falls back to DEFAULT_MODELS when model is null", async () => {
+    const result = await resolveAiConfig({ ...baseRaw, model: null });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.model).toBe("gpt-4o-mini");
+  });
+
+  it("uses modelOverride when provided and non-null", async () => {
+    const result = await resolveAiConfig(baseRaw, { modelOverride: "gpt-4o" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.model).toBe("gpt-4o");
+  });
+
+  it("returns no-api-key error when encryptedApiKey is null", async () => {
+    const result = await resolveAiConfig({ ...baseRaw, encryptedApiKey: null });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("no-api-key");
+    expect(result.error.message).toBe("AI config has no API key stored");
+  });
+
+  it("returns no-model error when requireModel is true and model is null", async () => {
+    const result = await resolveAiConfig({ ...baseRaw, model: null }, { requireModel: true });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("no-model");
+  });
+
+  it("does NOT return no-model when requireModel is false (falls back to DEFAULT_MODELS)", async () => {
+    const result = await resolveAiConfig({ ...baseRaw, model: null });
+    expect(result.ok).toBe(true);
+  });
+
+  it("validates a custom base URL via assertSafeHost and rejects unsafe hosts", async () => {
+    assertSafeHostMock.mockResolvedValue({ ok: false, reason: "Host resolves to a private/reserved IP range." });
+    const result = await resolveAiConfig({ ...baseRaw, baseUrl: "http://internal:8080/v1" });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("unsafe-base-url");
+    expect(result.error.message).toBe("Host resolves to a private/reserved IP range.");
+    expect(assertSafeHostMock).toHaveBeenCalledWith("http://internal:8080/v1");
+  });
+
+  it("uses 'unsafe host' as fallback reason when assertSafeHost returns no reason", async () => {
+    assertSafeHostMock.mockResolvedValue({ ok: false });
+    const result = await resolveAiConfig({ ...baseRaw, baseUrl: "http://internal:8080/v1" });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toBe("unsafe host");
+  });
+
+  it("passes validation for a safe custom base URL", async () => {
+    assertSafeHostMock.mockResolvedValue({ ok: true });
+    const result = await resolveAiConfig({ ...baseRaw, baseUrl: "https://api.customai.com/v1" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.baseUrl).toBe("https://api.customai.com/v1");
+  });
+
+  it("resolves built-in provider base URLs without calling assertSafeHost", async () => {
+    const result = await resolveAiConfig({
+      ...baseRaw,
+      provider: "google_gemini",
+      baseUrl: null,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta/openai");
+    expect(assertSafeHostMock).not.toHaveBeenCalled();
+  });
+
+  it("prefers a custom base URL over the built-in provider URL", async () => {
+    const result = await resolveAiConfig({
+      ...baseRaw,
+      provider: "google_gemini",
+      baseUrl: "https://custom.example.com/v1",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.baseUrl).toBe("https://custom.example.com/v1");
+    expect(assertSafeHostMock).toHaveBeenCalledWith("https://custom.example.com/v1");
   });
 });

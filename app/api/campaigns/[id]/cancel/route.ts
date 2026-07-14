@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSendQueue } from "@/lib/jobs/queue";
+import { getAuthenticatedUser } from "@/lib/api/session";
+import { findOwnedCampaign } from "@/lib/api/ownership";
 
 export const runtime = "nodejs";
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
 
-  const campaign = await prisma.campaign.findFirst({
-    where: { id, userId: session.user.id },
-  });
+  const campaign = await findOwnedCampaign(id, user.id);
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (!["sending", "paused", "completed"].includes(campaign.status)) {

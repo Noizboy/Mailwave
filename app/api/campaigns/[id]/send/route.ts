@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSendQueue } from "@/lib/jobs/queue";
+import { getAuthenticatedUser } from "@/lib/api/session";
+import { findOwnedCampaign } from "@/lib/api/ownership";
 
 export const runtime = "nodejs";
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
 
-  const campaign = await prisma.campaign.findFirst({
-    where: { id, userId: session.user.id },
-  });
+  const campaign = await findOwnedCampaign(id, user.id);
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (!["ready_to_send", "paused"].includes(campaign.status)) {
@@ -24,7 +23,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     );
   }
 
-  const smtpConfig = await prisma.smtpConfig.findUnique({ where: { userId: session.user.id } });
+  const smtpConfig = await prisma.smtpConfig.findUnique({ where: { userId: user.id } });
   if (!smtpConfig || smtpConfig.status !== "connected") {
     return NextResponse.json(
       { error: "SMTP not connected. Please configure SMTP in Settings." },
@@ -62,7 +61,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   try {
     const job = await queue.add(
       "send",
-      { campaignId: campaign.id, userId: session.user.id, sendRunId },
+      { campaignId: campaign.id, userId: user.id, sendRunId },
       {
         attempts: 1,
         jobId: `send-${campaign.id}-${sendRunId}`,

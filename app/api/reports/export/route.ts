@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getAuthenticatedUser } from "@/lib/api/session";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
   const campaignId = url.searchParams.get("campaignId");
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const emails = await prisma.campaignEmail.findMany({
     where: {
       ...(campaignId ? { campaignId } : {}),
-      campaign: { userId: session.user.id },
+      campaign: { userId: user.id },
     },
     include: {
       contact: { select: { email: true, firstName: true, lastName: true, company: true } },

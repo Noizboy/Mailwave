@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
+import { getAuthenticatedUser } from "@/lib/api/session";
+import { findOwnedCampaign } from "@/lib/api/ownership";
 import { z } from "zod";
 
 export const runtime = "nodejs";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
 
-  const campaign = await prisma.campaign.findFirst({
-    where: { id, userId: session.user.id },
+  const campaign = await findOwnedCampaign(id, user.id, {
     include: {
       list: { select: { id: true, name: true } },
       emails: {
@@ -64,8 +64,8 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
 
@@ -79,7 +79,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (rest.name) {
     const duplicate = await prisma.campaign.findFirst({
-      where: { userId: session.user.id, name: rest.name, NOT: { id } },
+      where: { userId: user.id, name: rest.name, NOT: { id } },
       select: { id: true },
     });
     if (duplicate) {
@@ -88,7 +88,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const updated = await prisma.campaign.updateMany({
-    where: { id, userId: session.user.id },
+    where: { id, userId: user.id },
     data: {
       ...rest,
       ...(scheduledAt !== undefined ? { scheduledAt: scheduledAt ? new Date(scheduledAt) : null } : {}),
@@ -100,13 +100,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
 
   await prisma.campaign.deleteMany({
-    where: { id, userId: session.user.id },
+    where: { id, userId: user.id },
   });
 
   return NextResponse.json({ ok: true });

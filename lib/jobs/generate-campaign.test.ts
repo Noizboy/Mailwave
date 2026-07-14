@@ -28,6 +28,15 @@ vi.mock("@/lib/ai", () => ({
   buildUserPrompt: vi.fn(() => "user prompt"),
   DEFAULT_MODELS: { openai: "gpt-4o-mini" },
   PROVIDER_BASE_URLS: {},
+  resolveAiConfig: vi.fn().mockResolvedValue({
+    ok: true,
+    config: {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      apiKey: "decrypted-api-key",
+      baseUrl: undefined,
+    },
+  }),
 }));
 
 import { prisma } from "@/lib/prisma";
@@ -243,6 +252,9 @@ describe("processGenerate", () => {
   });
 
   it("aborts generation and notifies when the AI service returns a 5xx error", async () => {
+    mocked(prisma.notificationPreference.findMany).mockResolvedValue([
+      { eventType: "ai_email_error", inApp: true },
+    ] as never);
     mocked(prisma.listMember.findMany).mockResolvedValue([
       member("c1", "a@b.com"),
       member("c2", "c@d.com"),
@@ -379,7 +391,10 @@ describe("processGenerate", () => {
     expect(prisma.notification.create).not.toHaveBeenCalled();
   });
 
-  it("creates the generation_failed notification when ai_email_error pref is on (default)", async () => {
+  it("creates the generation_failed notification when ai_email_error pref is on", async () => {
+    mocked(prisma.notificationPreference.findMany).mockResolvedValue([
+      { eventType: "ai_email_error", inApp: true },
+    ] as never);
     mocked(prisma.listMember.findMany).mockResolvedValue([] as never);
 
     await processGenerate(fakeJob());

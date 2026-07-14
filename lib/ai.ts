@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { decrypt } from "@/lib/crypto";
+import { assertSafeHost } from "@/lib/ssrf";
 
 export type AiProviderName = "openai" | "anthropic" | "google_gemini" | "openrouter" | "custom";
 
@@ -15,6 +17,105 @@ export const DEFAULT_MODELS: Record<string, string> = {
   openrouter: "openai/gpt-4o-mini",
   custom: "gpt-4o-mini",
 };
+
+// ─── AI config resolution boundary (MT-H4) ───────────────────────────────────
+//
+// Centralizes provider/model/base URL/key resolution and custom base URL
+// validation so the three primary consumers (campaign generation worker,
+// single-email regenerate route, and AI settings test route) cannot drift.
+// Prompt construction stays separate (see buildSystemPrompt / buildUserPrompt).
+
+/**
+ * Structural view of a stored AiConfig row — only the fields the resolver needs.
+ * Consumers fetch the row themselves (their queries differ) and pass it here.
+ */
+export interface RawAiConfig {
+  provider: string;
+  model: string | null;
+  encryptedApiKey: string | null;
+  baseUrl: string | null;
+}
+
+/** Ready-to-use AI configuration: decrypted key, resolved model, validated base URL. */
+export interface ResolvedAiConfig {
+  provider: AiProviderName;
+  model: string;
+  apiKey: string;
+  baseUrl: string | undefined;
+}
+
+export type ResolveAiConfigErrorCode = "no-api-key" | "no-model" | "unsafe-base-url";
+
+export interface ResolveAiConfigError {
+  code: ResolveAiConfigErrorCode;
+  /** Consumer-facing reason from the underlying check (e.g. assertSafeHost reason). */
+  message: string;
+}
+
+export type ResolveAiConfigResult =
+  | { ok: true; config: ResolvedAiConfig }
+  | { ok: false; error: ResolveAiConfigError };
+
+export interface ResolveAiConfigOptions {
+  /**
+   * Per-call model override (e.g. campaign.aiModel). When provided and non-null,
+   * takes priority over the stored model and DEFAULT_MODELS.
+   */
+  modelOverride?: string | null;
+  /**
+   * When true, a missing stored model is a hard error instead of falling back to
+   * DEFAULT_MODELS. The regenerate route requires an explicitly configured model.
+   */
+  requireModel?: boolean;
+}
+
+/**
+ * Resolves a ready-to-use AI configuration from a stored AiConfig row:
+ * decrypts the API key, resolves the model (override → stored → default),
+ * resolves the base URL (custom → built-in provider URL → undefined), and
+ * validates user-supplied custom base URLs via assertSafeHost to close the
+ * DNS-rebinding / TOCTOU window (CN-005, CWE-918). Built-in provider URLs
+ * (PROVIDER_BASE_URLS) are trusted and skip the SSRF check.
+ *
+ * Returns a discriminated union so each consumer can map errors to its own
+ * HTTP status / throw message without losing the structured reason.
+ */
+export async function resolveAiConfig(
+  raw: RawAiConfig,
+  options: ResolveAiConfigOptions = {}
+): Promise<ResolveAiConfigResult> {
+  if (!raw.encryptedApiKey) {
+    return {
+      ok: false,
+      error: { code: "no-api-key", message: "AI config has no API key stored" },
+    };
+  }
+
+  const provider = raw.provider as AiProviderName;
+
+  if (options.requireModel && !raw.model) {
+    return {
+      ok: false,
+      error: { code: "no-model", message: "AI config has no model configured" },
+    };
+  }
+
+  const model = options.modelOverride ?? raw.model ?? DEFAULT_MODELS[provider] ?? "gpt-4o-mini";
+  const apiKey = decrypt(raw.encryptedApiKey);
+  const baseUrl = raw.baseUrl ?? PROVIDER_BASE_URLS[provider] ?? undefined;
+
+  if (raw.baseUrl) {
+    const hostCheck = await assertSafeHost(raw.baseUrl);
+    if (!hostCheck.ok) {
+      return {
+        ok: false,
+        error: { code: "unsafe-base-url", message: hostCheck.reason ?? "unsafe host" },
+      };
+    }
+  }
+
+  return { ok: true, config: { provider, model, apiKey, baseUrl } };
+}
 
 export interface AiGenerationInput {
   provider: AiProviderName;

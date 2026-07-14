@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { assertSafeHost } from "@/lib/ssrf";
 import { z } from "zod";
+import { getAuthenticatedUser } from "@/lib/api/session";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const config = await prisma.smtpConfig.findUnique({
-    where: { userId: session.user.id },
+    where: { userId: user.id },
   });
 
   if (!config) return NextResponse.json(null);
@@ -37,8 +37,8 @@ const smtpSchema = z.object({
 });
 
 export async function PUT(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
   const parsed = smtpSchema.safeParse(body);
@@ -54,16 +54,16 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: hostCheck.reason ?? "Invalid SMTP host." }, { status: 400 });
   }
 
-  const existing = await prisma.smtpConfig.findUnique({ where: { userId: session.user.id } });
+  const existing = await prisma.smtpConfig.findUnique({ where: { userId: user.id } });
 
   const encryptedPassword = password
     ? encrypt(password)
     : existing?.encryptedPassword ?? null;
 
   await prisma.smtpConfig.upsert({
-    where: { userId: session.user.id },
+    where: { userId: user.id },
     create: {
-      userId: session.user.id,
+      userId: user.id,
       ...rest,
       encryptedPassword,
       status: "disconnected",

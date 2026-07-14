@@ -5,7 +5,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 test("app shell — navigation links exist", async ({ page }) => {
   await page.goto("/login");
-  await expect(page.getByText("MailWave")).toBeVisible();
+  await expect(page.getByRole("img", { name: "MailWave" })).toBeVisible();
 });
 
 test("authenticated shell reaches the dashboard via saved storage state", async ({ browser }) => {

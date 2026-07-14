@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getAuthenticatedUser } from "@/lib/api/session";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const lists = await prisma.list.findMany({
-    where: { userId: session.user.id },
+    where: { userId: user.id },
     include: {
       _count: { select: { members: true } },
       members: {
@@ -35,8 +35,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { name } = await req.json();
   if (!name?.trim()) {
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   const list = await prisma.list.create({
-    data: { userId: session.user.id, name: name.trim() },
+    data: { userId: user.id, name: name.trim() },
   });
 
   return NextResponse.json(list, { status: 201 });
