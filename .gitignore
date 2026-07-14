@@ -68,6 +68,7 @@ next-env.d.ts
 /.thumbnail
 
 # local agent/editor config (never commit local MCP/agent configs or skills)
+.agents/
 .claude/
 .opencode/
 .github/workflows/
