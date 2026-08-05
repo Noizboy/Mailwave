@@ -172,6 +172,35 @@ const articles: Article[] = [
     </>,
   },
   {
+    id: "ai-hint", group: "Using the system", title: "AI Hint — personalizing per contact",
+    description: "How the ai_hint field reaches the language model and what to write there.", keywords: "ai hint aihint csv contact personalization prompt context notes additional",
+    icon: Sparkles,
+    content: <>
+      <Section title="What is the AI Hint?">
+        <p>The AI Hint is a free-text field attached to each contact. When MailWave generates an email it is injected into the prompt as an extra line of context, right after the structured fields:</p>
+        <div className="rounded-lg border bg-slate-950 px-4 py-3 text-[12px] leading-6 text-slate-100 font-mono whitespace-pre-wrap">{`Write a personalized cold email for the following recipient:\nEmail: jane@example.com\nName: Jane Smith\nCompany: Acme Corp\nJob Title: CEO\nAdditional context about this person: Interested in automation tools`}</div>
+        <p>The model receives this verbatim. A richer hint produces a more specific and credible email; an empty hint means the model relies only on the structured fields.</p>
+      </Section>
+      <Section title="What to write there">
+        <ConfigTable rows={[
+          ["Meeting or event notes", "Met at SaaStr 2025; mentioned they are evaluating outreach tools."],
+          ["Interests or priorities", "Publicly focused on reducing manual ops in their sales workflow."],
+          ["Pain points", "Manages a team of 30 reps with no dedicated sequencing tool."],
+          ["Referral context", "Referred by María López from Beta Corp."],
+          ["Recent company news", "Just closed a Series A; hiring heavily in sales."],
+          ["LinkedIn signal", "Recently posted about the cost of manual prospecting."],
+        ]} />
+        <Callout>Write the hint as a sentence or two of natural language. Bullet points and long lists do not improve the result — concise, specific context works best.</Callout>
+      </Section>
+      <Section title="How to populate it">
+        <p>In the CSV, use the column name <Code>ai_hint</Code> (also accepted: <Code>notes</Code>, <Code>note</Code>, <Code>hint</Code>, <Code>ai hint</Code>). In the contact detail page you can edit the field directly at any time — including after generation, before regenerating an individual email.</p>
+      </Section>
+      <Section title="Privacy note">
+        <Callout tone="warning">The hint is sent to the AI provider during generation alongside the contact&apos;s name, email, company, and job title. Do not include sensitive or regulated personal data.</Callout>
+      </Section>
+    </>,
+  },
+  {
     id: "campaigns", group: "Using the system", title: "Campaigns and generation",
     description: "Creation, AI generation, approval, and status management.", keywords: "campaign goal cta tone language generate approve review pause resume schedule",
     icon: Mail,

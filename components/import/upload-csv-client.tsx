@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { UploadCloud, CheckCircle2 } from "lucide-react";
+import { UploadCloud, CheckCircle2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
@@ -70,6 +70,21 @@ export function UploadCsvClient() {
     if (result) router.push(`/import/${result.importId}`);
   };
 
+  const handleDownloadSample = () => {
+    const csv = [
+      "email,first_name,last_name,company,job_title,linkedin,ai_hint",
+      "jane@example.com,Jane,Smith,Acme Corp,CEO,https://linkedin.com/in/janesmith,Interested in automation tools",
+      "john@example.com,John,Doe,Beta Inc,CTO,,Recently raised Series A",
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "mailwave-sample.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleReset = () => {
     setState("idle");
     setSelectedFile(null);
@@ -82,10 +97,18 @@ export function UploadCsvClient() {
     <div className="mx-auto max-w-2xl">
       <Card>
         <CardHeader>
-          <CardTitle>Import contacts from CSV</CardTitle>
-          <CardDescription>
-            CSV must include at least one email column. Headers are detected automatically.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle>Import contacts from CSV</CardTitle>
+              <CardDescription>
+                CSV must include at least one email column. Headers are detected automatically — column order does not matter.
+              </CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleDownloadSample} className="shrink-0">
+              <Download className="mr-2 h-4 w-4" />
+              Download sample
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {state !== "success" ? (
