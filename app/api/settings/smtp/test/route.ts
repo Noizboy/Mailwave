@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
               If you received this, your mail server is configured correctly and ready to send campaigns.
             </p>
             <hr style="border:none;border-top:1px solid #eee;margin:0 0 16px;" />
-            <p style="color:#999;font-size:12px;margin:0 0 4px;">From: ${config.fromEmail ?? config.username ?? ""}</p>
+            <p style="color:#999;font-size:12px;margin:0 0 4px;">From: ${config.fromName ?? ""} &lt;${fromAddress}&gt;</p>
             <p style="color:#999;font-size:12px;margin:0;">SMTP: ${config.host}:${config.port ?? 587}</p>
           </div>
         `,

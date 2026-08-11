@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, XCircle, Loader2, Eye, EyeOff, Mail, Send, Server } from "lucide-react";
+import { CheckCircle, XCircle, Loader2, Eye, EyeOff, Mail, Send, Server, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -195,6 +195,7 @@ function SmtpFormFields({
   const [form, setForm] = useState<Partial<SmtpData>>(existingConfig ?? defaultValues);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [showFromInfo, setShowFromInfo] = useState(false);
   const [loaded, setLoaded] = useState(!!existingConfig);
   const [prevExisting, setPrevExisting] = useState(existingConfig);
   // Sync local form state when an existing config arrives asynchronously.
@@ -346,7 +347,21 @@ function SmtpFormFields({
             placeholder="Acme Corp"
           />
         </SettingField>
-        <SettingField label="From Email">
+        <SettingField
+          label={
+            <span className="flex items-center gap-1">
+              From Email
+              <button
+                type="button"
+                onClick={() => setShowFromInfo(true)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Learn about From Email limitations"
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          }
+        >
           <Input
             value={form.fromEmail ?? ""}
             onChange={(e) => set("fromEmail", e.target.value)}
@@ -425,6 +440,61 @@ function SmtpFormFields({
           Last test failed — check your credentials and try again.
         </div>
       )}
+
+      <Dialog open={showFromInfo} onOpenChange={setShowFromInfo}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-muted-foreground" />
+              About the From Email Address
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm text-foreground pt-1">
+                <p>
+                  If the test email arrived showing the <strong>SMTP Username</strong> as the sender
+                  instead of your configured <strong>From Email</strong>, your SMTP provider may be
+                  overriding the sender address.
+                </p>
+                <p>
+                  Most providers only allow sending from an address that is{" "}
+                  <strong>linked and verified</strong> with the authenticated SMTP account.
+                </p>
+                <div className="rounded-md border bg-muted/50 p-3 space-y-2">
+                  <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">
+                    How to fix it
+                  </p>
+                  <ul className="space-y-1.5 text-sm">
+                    <li>
+                      <span className="font-medium">Gmail:</span> Go to{" "}
+                      <span className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
+                        Settings → Accounts → Send mail as
+                      </span>{" "}
+                      and add your From Email as an authorized sender.
+                    </li>
+                    <li>
+                      <span className="font-medium">Outlook / Office 365:</span> An admin must
+                      grant <em>Send As</em> permission for the From Email in the Microsoft 365
+                      admin center.
+                    </li>
+                    <li>
+                      <span className="font-medium">SendGrid / Mailgun / SES:</span> Verify the
+                      From Email domain with SPF and DKIM records in your DNS settings.
+                    </li>
+                    <li>
+                      <span className="font-medium">Other providers:</span> Check your provider's
+                      documentation for sender identity verification or &quot;Send As&quot; setup.
+                    </li>
+                  </ul>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Once verified, your emails will be delivered using the From Name and From Email
+                  you configured here.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
