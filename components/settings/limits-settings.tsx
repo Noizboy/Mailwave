@@ -40,15 +40,13 @@ export function SendingLimitsSettings() {
     },
   });
 
-  // Sync form from DB whenever fresh data arrives (covers initial load and post-save refetch).
-  // We only overwrite if form is null (initial) or after a save resets it to null.
+  // Sync the form whenever fresh data arrives (initial load and post-save refetch).
+  // TanStack Query's structural sharing keeps `limitsData` referentially stable when a
+  // refetch returns identical values, so this only fires when the values really changed
+  // and cannot clobber what the user is typing during a background refetch.
   useEffect(() => {
-    // One-time seed from the query cache: guarded by `form === null`, so it runs
-    // once when data first arrives and cannot cascade (the setState-in-effect
-    // rule can't see the guard). Deliberate, hence both suppressions.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (limitsData && form === null) setForm(limitsToForm(limitsData));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (limitsData) setForm(limitsToForm(limitsData));
   }, [limitsData]);
 
   const setNum = (key: keyof LimitsForm, value: string) =>
@@ -69,8 +67,6 @@ export function SendingLimitsSettings() {
     });
     if (res.ok) {
       toast.success("Sending limits saved", "New rate limits will apply to upcoming campaigns.");
-      // Reset to null so the useEffect repopulates from the fresh DB values.
-      setForm(null);
       queryClient.invalidateQueries({ queryKey: ["settings-limits"] });
     } else {
       toast.error("Could not save limits", "An unexpected error occurred. Try again.");
@@ -92,6 +88,10 @@ export function SendingLimitsSettings() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Sending Limits</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          These limits apply to your whole account, across every campaign — they control how fast
+          Mailwave sends and how many emails a single contact can receive.
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -102,6 +102,10 @@ export function SendingLimitsSettings() {
               value={form.dailyLimit}
               onChange={(e) => setNum("dailyLimit", e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              Most emails your account can send in any rolling 24-hour window. When the limit is
+              reached, sending pauses and resumes automatically once the window frees up.
+            </p>
           </SettingField>
           <SettingField label="Max emails per hour">
             <Input
@@ -110,6 +114,10 @@ export function SendingLimitsSettings() {
               value={form.hourlyLimit}
               onChange={(e) => setNum("hourlyLimit", e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              Same rule over a rolling 60-minute window. Keep it well below your provider&apos;s
+              cap so bursts of sending don&apos;t hurt your sender reputation.
+            </p>
           </SettingField>
         </div>
         <SettingField label="Auto-suppress after N emails">
@@ -119,10 +127,12 @@ export function SendingLimitsSettings() {
             value={form.suppressAfterEmails}
             onChange={(e) => setNum("suppressAfterEmails", e.target.value)}
           />
+          <p className="text-xs text-muted-foreground">
+            Total emails one contact can ever receive from you. When a contact reaches this number
+            they are automatically marked as Suppressed and excluded from all future campaigns.
+            Saving a lower value also suppresses contacts that are already above the new threshold.
+          </p>
         </SettingField>
-        <p className="text-xs text-muted-foreground">
-          When a contact reaches this limit they are automatically marked as Suppressed and excluded from all future campaigns.
-        </p>
         <Button onClick={handleSave} disabled={saving}>
           {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : "Save Limits"}
         </Button>
