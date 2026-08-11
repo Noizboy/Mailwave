@@ -88,19 +88,18 @@ describe("generateEmail", () => {
     expect(result.subject).toBe("Hi Alice");
   });
 
-  it("falls back to raw content when JSON parsing fails", async () => {
+  it("throws a descriptive error when the model returns non-JSON", async () => {
     openaiCreate.mockResolvedValue(openaiResponse("Dear Alice, plain text — not JSON."));
-    const result = await generateEmail({ ...baseInput, provider: "openai" });
-    expect(result.subject).toBe("Generated Subject");
-    expect(result.body).toBe("Dear Alice, plain text — not JSON.");
-    expect(result.personalizationNotes).toContain("JSON parse failed");
+    await expect(generateEmail({ ...baseInput, provider: "openai" })).rejects.toThrow(
+      "AI returned non-JSON response"
+    );
   });
 
-  it("handles empty completion content without throwing", async () => {
+  it("throws when the model returns empty content", async () => {
     openaiCreate.mockResolvedValue({ choices: [] });
-    const result = await generateEmail({ ...baseInput, provider: "openai" });
-    expect(result.subject).toBe("Generated Subject");
-    expect(result.body).toBe("");
+    await expect(generateEmail({ ...baseInput, provider: "openai" })).rejects.toThrow(
+      "AI returned non-JSON response"
+    );
   });
 });
 

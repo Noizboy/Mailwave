@@ -58,21 +58,27 @@ async function runGeneration(
   campaignId: string,
   userId: string
 ): Promise<{ successCount: number; failCount: number }> {
+  const tag = `[generate:${campaignId}]`;
+
   // --- Stage 1: load campaign + mark generating ---
   const campaign = await loadCampaignForGeneration(campaignId, userId);
+  console.log(`${tag} Starting generation for campaign "${campaign.name}"`);
 
   // Fetch notification prefs once for the whole job.
   const prefs: NotifPrefs = await getNotifPrefs(userId, ["ai_email_ready", "ai_email_error"]);
 
   // --- Stage 2: load eligible contacts ---
   const contacts = await loadEligibleContacts(campaign, userId);
+  console.log(`${tag} Eligible contacts: ${contacts.length}`);
 
   // --- Stage 3: resolve + validate AI config (MT-H4) ---
   const aiConfig = await resolveGenerationAiConfig(userId, campaign);
   if (!aiConfig.ok) {
+    console.error(`${tag} AI config resolution failed:`, aiConfig.error.message);
     await markCampaignFailed(campaignId);
     throw aiConfig.error;
   }
+  console.log(`${tag} AI config resolved — provider: ${aiConfig.config.provider}, model: ${aiConfig.config.model}`);
 
   // --- Stage 4: build shared generation context ---
   // Built unconditionally (matches original behavior): the system prompt and
@@ -82,6 +88,7 @@ async function runGeneration(
 
   // No eligible contacts → fail the run and notify (when the pref allows).
   if (contacts.length === 0) {
+    console.warn(`${tag} No eligible contacts — aborting`);
     await failGenerationRunAndNotify({
       campaignId,
       userId,
@@ -100,6 +107,7 @@ async function runGeneration(
   for (const contact of contacts) {
     // Honor an external cancel issued via the UI while the run is in flight.
     if (await isGenerationCancelled(campaignId)) {
+      console.log(`${tag} Cancelled — stopping at ${successCount} ok / ${failCount} failed`);
       return { successCount, failCount };
     }
 
@@ -112,9 +120,11 @@ async function runGeneration(
       successCount++;
     } else if (outcome.kind === "failed") {
       failCount++;
+      console.error(`${tag} Contact ${contact.id} (${contact.email}) failed: ${outcome.error.message}`);
     } else {
       // Service-level failure: abort the whole run rather than failing every
       // remaining contact. No email row was persisted for this contact.
+      console.error(`${tag} Service error — aborting run: ${outcome.error.message}`);
       await failGenerationRunAndNotify({
         campaignId,
         userId,
@@ -133,6 +143,7 @@ async function runGeneration(
   }
 
   // --- Stage 6: finalize → pending_review + completion notification ---
+  console.log(`${tag} Generation complete — ${successCount} ok / ${failCount} failed / ${contacts.length} total`);
   await finalizeGeneration({
     campaignId,
     userId,

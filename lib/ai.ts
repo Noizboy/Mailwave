@@ -186,20 +186,39 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code fence
     content = completion.choices[0]?.message?.content ?? "";
   }
 
-  const cleaned = content.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
+  // Strip markdown code fences only at the very start/end of the string (no /m flag
+  // so ^ and $ anchor to string boundaries, not line boundaries — prevents mid-content
+  // triple-backtick sequences from corrupting the JSON).
+  const cleaned = content.replace(/^```(?:json)?\n?/, "").replace(/\n?```\s*$/, "").trim();
 
-  let parsed: AiGenerationResult;
+  let parsed: { subject?: unknown; body?: unknown; personalizationNotes?: unknown };
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    parsed = {
-      subject: "Generated Subject",
-      body: content,
-      personalizationNotes: "Raw generation - JSON parse failed",
-    };
+    // JSON parse failed — throw a descriptive error so the per-contact
+    // error path records the failure rather than silently saving garbage.
+    throw new Error(
+      `AI returned non-JSON response (${content.length} chars): ${content.slice(0, 200)}`
+    );
   }
 
-  return parsed;
+  // Validate required fields are present and non-empty strings.
+  if (typeof parsed.subject !== "string" || !parsed.subject.trim()) {
+    throw new Error(
+      `AI response missing valid "subject" field. Keys received: ${Object.keys(parsed).join(", ") || "(none)"}`
+    );
+  }
+  if (typeof parsed.body !== "string" || !parsed.body.trim()) {
+    throw new Error(
+      `AI response missing valid "body" field. Keys received: ${Object.keys(parsed).join(", ") || "(none)"}`
+    );
+  }
+
+  return {
+    subject: parsed.subject,
+    body: parsed.body,
+    personalizationNotes: typeof parsed.personalizationNotes === "string" ? parsed.personalizationNotes : "",
+  };
 }
 
 export function buildSystemPrompt(campaignContext: {
