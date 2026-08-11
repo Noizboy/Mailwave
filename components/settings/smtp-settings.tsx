@@ -339,8 +339,8 @@ function SmtpFormFields({
       </SettingField>
 
       {/* From Name + From Email */}
-      <div className="flex items-end gap-4">
-        <SettingField label="From Name">
+      <div className="grid grid-cols-2 gap-4">
+        <SettingField label={<span className="flex items-center">From Name</span>}>
           <Input
             value={form.fromName ?? ""}
             onChange={(e) => set("fromName", e.target.value)}
@@ -442,7 +442,7 @@ function SmtpFormFields({
       )}
 
       <Dialog open={showFromInfo} onOpenChange={setShowFromInfo}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <Info className="h-4 w-4 shrink-0 text-muted-foreground" />
