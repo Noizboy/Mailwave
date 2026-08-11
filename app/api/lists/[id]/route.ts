@@ -71,6 +71,17 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = await params;
 
+  const campaignCount = await prisma.campaign.count({
+    where: { listId: id, userId: user.id },
+  });
+
+  if (campaignCount > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete list: ${campaignCount} campaign(s) are using it. Delete or reassign those campaigns first.` },
+      { status: 409 }
+    );
+  }
+
   await prisma.list.deleteMany({
     where: { id, userId: user.id },
   });
