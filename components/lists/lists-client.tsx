@@ -103,8 +103,11 @@ export function ListsClient() {
     if (res.ok) {
       toast.success("List deleted", "The list was removed. Contacts were preserved in your account.");
       queryClient.invalidateQueries({ queryKey: ["lists"] });
+      setDeleteTarget(null);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error("Cannot delete list", data.error ?? "An unexpected error occurred.");
     }
-    setDeleteTarget(null);
   };
 
   const filtered = lists.filter((l) =>
