@@ -339,7 +339,7 @@ function SmtpFormFields({
       </SettingField>
 
       {/* From Name + From Email */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="flex items-end gap-4">
         <SettingField label="From Name">
           <Input
             value={form.fromName ?? ""}
@@ -444,55 +444,64 @@ function SmtpFormFields({
       <Dialog open={showFromInfo} onOpenChange={setShowFromInfo}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Info className="h-4 w-4 text-muted-foreground" />
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Info className="h-4 w-4 shrink-0 text-muted-foreground" />
               About the From Email Address
             </DialogTitle>
-            <DialogDescription asChild>
-              <div className="space-y-3 text-sm text-foreground pt-1">
-                <p>
-                  If the test email arrived showing the <strong>SMTP Username</strong> as the sender
-                  instead of your configured <strong>From Email</strong>, your SMTP provider may be
-                  overriding the sender address.
-                </p>
-                <p>
-                  Most providers only allow sending from an address that is{" "}
-                  <strong>linked and verified</strong> with the authenticated SMTP account.
-                </p>
-                <div className="rounded-md border bg-muted/50 p-3 space-y-2">
-                  <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">
-                    How to fix it
-                  </p>
-                  <ul className="space-y-1.5 text-sm">
-                    <li>
-                      <span className="font-medium">Gmail:</span> Go to{" "}
-                      <span className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
-                        Settings → Accounts → Send mail as
-                      </span>{" "}
-                      and add your From Email as an authorized sender.
-                    </li>
-                    <li>
-                      <span className="font-medium">Outlook / Office 365:</span> An admin must
-                      grant <em>Send As</em> permission for the From Email in the Microsoft 365
-                      admin center.
-                    </li>
-                    <li>
-                      <span className="font-medium">SendGrid / Mailgun / SES:</span> Verify the
-                      From Email domain with SPF and DKIM records in your DNS settings.
-                    </li>
-                    <li>
-                      <span className="font-medium">Other providers:</span> Check your provider's
-                      documentation for sender identity verification or &quot;Send As&quot; setup.
-                    </li>
-                  </ul>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Once verified, your emails will be delivered using the From Name and From Email
-                  you configured here.
-                </p>
-              </div>
-            </DialogDescription>
           </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground leading-relaxed">
+              If your test email arrived showing the{" "}
+              <span className="font-medium text-foreground">SMTP Username</span> as the sender
+              instead of your configured{" "}
+              <span className="font-medium text-foreground">From Email</span>, your provider may
+              be overriding the sender address.
+            </p>
+            <p className="text-muted-foreground leading-relaxed">
+              Most SMTP providers only allow sending from an address that is{" "}
+              <span className="font-medium text-foreground">linked and verified</span> with the
+              authenticated account.
+            </p>
+            <div className="rounded-lg border bg-muted/40 divide-y">
+              <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                How to fix it
+              </p>
+              {[
+                {
+                  provider: "Gmail",
+                  fix: (
+                    <>
+                      Go to{" "}
+                      <code className="rounded bg-muted px-1 py-0.5 text-xs font-mono">
+                        Settings → Accounts → Send mail as
+                      </code>{" "}
+                      and add your From Email as an authorized sender.
+                    </>
+                  ),
+                },
+                {
+                  provider: "Outlook / Office 365",
+                  fix: <>An admin must grant <em>Send As</em> permission for the From Email in the Microsoft 365 admin center.</>,
+                },
+                {
+                  provider: "SendGrid / Mailgun / SES",
+                  fix: <>Verify the From Email domain with SPF and DKIM records in your DNS settings.</>,
+                },
+                {
+                  provider: "Other providers",
+                  fix: <>Check your provider&apos;s documentation for sender identity verification or &quot;Send As&quot; setup.</>,
+                },
+              ].map(({ provider, fix }) => (
+                <div key={provider} className="flex gap-3 px-3 py-2.5">
+                  <span className="shrink-0 font-medium text-foreground w-40">{provider}</span>
+                  <span className="text-muted-foreground leading-relaxed">{fix}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Once verified, emails will be delivered using the From Name and From Email configured here.
+            </p>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
