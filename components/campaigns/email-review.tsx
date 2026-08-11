@@ -9,6 +9,7 @@ import {
   Edit3,
   RefreshCw,
   X,
+  XCircle,
   Clock,
   Sparkles,
 } from "lucide-react";
@@ -79,6 +80,8 @@ export function EmailReview({
       ? failedGenerationEmails
       : sidebarFilter === "sent"
       ? emails.filter((e) => e.status === "sent")
+      : sidebarFilter === "pending"
+      ? emails.filter((e) => e.approvalStatus === "pending" && e.status !== "failed")
       : emails.filter((e) => e.approvalStatus === sidebarFilter);
 
   const selected =
@@ -88,7 +91,7 @@ export function EmailReview({
     (e) => e.approvalStatus === "approved"
   ).length;
   const reviewPendingCount = emails.filter(
-    (e) => e.approvalStatus === "pending"
+    (e) => e.approvalStatus === "pending" && e.status !== "failed"
   ).length;
   const rejectedCount = emails.filter(
     (e) => e.approvalStatus === "rejected"
@@ -315,7 +318,10 @@ export function EmailReview({
 
                 let approvalLabel = email.approvalStatus.toUpperCase();
                 let approvalBg = "bg-amber-100 text-amber-700";
-                if (email.status === "sent") {
+                if (email.status === "failed") {
+                  approvalLabel = "FAILED";
+                  approvalBg = "bg-destructive/10 text-destructive";
+                } else if (email.status === "sent") {
                   approvalLabel = "SENT";
                   approvalBg = "bg-sky-100 text-sky-700";
                   if (email.opened) {
@@ -483,12 +489,25 @@ export function EmailReview({
                 </Link>
                 <StatusBadge
                   status={
-                    selected.contact.status === "suppressed"
+                    selected.status === "failed"
+                      ? "rejected"
+                      : selected.contact.status === "suppressed"
                       ? "rejected"
                       : selected.approvalStatus
                   }
                 />
               </div>
+
+              {/* Generation failure banner */}
+              {selected.status === "failed" && (
+                <div className="rounded-lg bg-destructive/10 px-4 py-3 text-xs text-destructive flex gap-2">
+                  <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <div>
+                    <strong>Generation failed:</strong>{" "}
+                    {selected.errorReason ?? "Unknown error"}
+                  </div>
+                </div>
+              )}
 
               {/* AI notes */}
               {selected.personalizationNotes && !editMode && (

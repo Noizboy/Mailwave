@@ -17,6 +17,7 @@ export interface EmailRow {
   personalizationNotes: string | null;
   approvalStatus: string;
   status: string;
+  errorReason: string | null;
   sentAt: string | null;
   opened?: boolean;
   contact: ContactSnippet;
