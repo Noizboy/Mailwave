@@ -12,7 +12,8 @@ function mockFetch(limits = { dailyLimit: 500, hourlyLimit: 50, suppressAfterEma
     const url = typeof input === "string" ? input : input.toString();
     const method = init?.method ?? "GET";
     if (url.includes("sending-limits") && method === "GET") {
-      // NOTE: a fresh object each call, but deeply equal -> structural sharing
+      // A fresh object each call, but deeply equal — this is what makes TanStack
+      // Query's structural sharing hand back the *previous* object reference.
       return new Response(JSON.stringify({ ...limits }), { status: 200 });
     }
     if (url.includes("sending-limits") && method === "PUT") {
@@ -24,29 +25,31 @@ function mockFetch(limits = { dailyLimit: 500, hourlyLimit: 50, suppressAfterEma
   return fetchMock;
 }
 
-describe("SendingLimitsSettings repro", () => {
+describe("SendingLimitsSettings", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("keeps showing values after saving unchanged values", async () => {
+  it("populates the inputs from the API", async () => {
     mockFetch();
     renderWithProviders(<SendingLimitsSettings />);
 
-    const daily = (await screen.findByDisplayValue("500")) as HTMLInputElement;
-    expect(daily.value).toBe("500");
+    expect(await screen.findByDisplayValue("500")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("50")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("3")).toBeInTheDocument();
+  });
 
-    // Save WITHOUT changing anything -> refetch returns deeply-equal data
+  // Regression: saving without changing anything made the post-save refetch return
+  // deeply-equal data, so structural sharing kept `limitsData` referentially stable.
+  // The sync effect never re-ran and the form stayed null — inputs blank / stuck on
+  // the spinner until a full page refresh.
+  it("keeps the values visible after saving unchanged values", async () => {
+    mockFetch();
+    renderWithProviders(<SendingLimitsSettings />);
+
+    await screen.findByDisplayValue("500");
     fireEvent.click(screen.getByRole("button", { name: /save limits/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /save limits/i })).toBeInTheDocument();
+      expect(screen.getByDisplayValue("500")).toBeInTheDocument();
     });
-
-    // Does the form come back, or are we stuck on the spinner?
-    await waitFor(
-      () => {
-        expect(screen.getByDisplayValue("500")).toBeInTheDocument();
-      },
-      { timeout: 2000 }
-    );
   });
 });
