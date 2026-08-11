@@ -186,14 +186,18 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code fence
     content = completion.choices[0]?.message?.content ?? "";
   }
 
-  // Strip markdown code fences only at the very start/end of the string (no /m flag
-  // so ^ and $ anchor to string boundaries, not line boundaries — prevents mid-content
-  // triple-backtick sequences from corrupting the JSON).
-  const cleaned = content.replace(/^```(?:json)?\n?/, "").replace(/\n?```\s*$/, "").trim();
+  // Strip markdown code fences at the very start/end, then attempt to locate
+  // the JSON object in case the model prefixed it with preamble text.
+  let jsonStr = content.replace(/^```(?:json)?\n?/, "").replace(/\n?```\s*$/, "").trim();
+  if (!jsonStr.startsWith("{")) {
+    const start = jsonStr.indexOf("{");
+    const end = jsonStr.lastIndexOf("}");
+    if (start !== -1 && end > start) jsonStr = jsonStr.slice(start, end + 1);
+  }
 
   let parsed: { subject?: unknown; body?: unknown; personalizationNotes?: unknown };
   try {
-    parsed = JSON.parse(cleaned);
+    parsed = JSON.parse(jsonStr);
   } catch {
     // JSON parse failed — throw a descriptive error so the per-contact
     // error path records the failure rather than silently saving garbage.

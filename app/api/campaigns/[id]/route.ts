@@ -39,6 +39,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     failedCount: metrics.failedCount,
     skippedCount: metrics.skippedCount,
     pendingCount: metrics.pendingCount,
+    approvalPendingCount: metrics.approvalPendingCount,
   });
 }
 

@@ -208,11 +208,16 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const approvedCount = emails.filter(
     (e) => e.approvalStatus === "approved"
   ).length;
-  const sendPendingCount = campaign.pendingCount;
+
 
   const canGenerate = ["pending", "failed"].includes(campaign.status);
   const canRetryGeneration =
     campaign.status === "pending_review" && campaign.failedCount > 0;
+  // True when generation was cancelled mid-way: some contacts have no email row yet.
+  const canContinue =
+    campaign.status === "pending_review" &&
+    campaign.totalEmails > 0 &&
+    campaign.emails.length < campaign.totalEmails;
   const canRegenerate =
     ["pending_review", "ready_to_send"].includes(campaign.status) &&
     campaign.failedCount === 0;
@@ -278,8 +283,8 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
       iconBg: "bg-red-100",
     },
     {
-      label: "Queued",
-      value: sendPendingCount,
+      label: "Pending Review",
+      value: campaign.approvalPendingCount ?? 0,
       tone: "warning",
       icon: <Clock className="h-5 w-5 text-amber-500" />,
       iconBg: "bg-amber-100",
@@ -332,6 +337,16 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                         {campaign.status === "completed"
                           ? "Re-Generate Emails"
                           : "Generate Emails"}
+                      </Button>
+                    )}
+                    {canContinue && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleGenerate("continue")}
+                        variant="outline"
+                      >
+                        <Play className="h-4 w-4" />
+                        Continue Generating
                       </Button>
                     )}
                     {canRetryGeneration && (

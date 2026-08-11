@@ -51,14 +51,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const body = await req.json().catch(() => ({}));
-  const retryFailed = body?.mode === "retry_failed";
+  const mode: string | undefined = body?.mode;
 
-  if (retryFailed) {
-    // Only reset failed emails — successfully generated ones are kept
+  if (mode === "retry_failed") {
+    // Reset failed AND still-pending emails; successfully generated ones are kept.
+    // Pending emails (never generated) are included so that any partially-run
+    // generation doesn't leave un-generated contacts behind after a retry.
     await prisma.campaignEmail.updateMany({
-      where: { campaignId: campaign.id, status: "failed" },
+      where: { campaignId: campaign.id, status: { in: ["failed", "pending"] } },
       data: { status: "pending", errorReason: null },
     });
+  } else if (mode === "continue") {
+    // No email resets — the worker's isAlreadyHandled logic skips contacts
+    // that already have a generated email and naturally picks up contacts
+    // with no row yet. Used after a cancelled generation run.
   } else {
     // Reset all non-skipped emails for a full (re-)generation; skipped emails
     // are intentionally excluded so the user's skip decisions are preserved.

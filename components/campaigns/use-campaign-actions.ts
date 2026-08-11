@@ -63,8 +63,8 @@ export interface UseCampaignActionsResult {
   /** POST /api/campaigns/:id/generate/cancel */
   cancelGenerate: () => Promise<void>;
 
-  /** POST /api/campaigns/:id/generate  (pass mode = "retry_failed" for retry) */
-  generate: (mode?: "retry_failed") => Promise<void>;
+  /** POST /api/campaigns/:id/generate  (pass mode for retry/continue variants) */
+  generate: (mode?: "retry_failed" | "continue") => Promise<void>;
 }
 
 export function useCampaignActions(
@@ -210,7 +210,7 @@ export function useCampaignActions(
 
   // ---- generate -------------------------------------------------------------
 
-  const generate = async (mode?: "retry_failed") => {
+  const generate = async (mode?: "retry_failed" | "continue") => {
     const res = await fetch(`/api/campaigns/${campaignId}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -220,6 +220,8 @@ export function useCampaignActions(
       const msg =
         mode === "retry_failed"
           ? "Retrying failed emails"
+          : mode === "continue"
+          ? "Continuing generation"
           : "Generating emails";
       toast.success(
         msg,
