@@ -4,7 +4,7 @@ const DEFAULTS: Record<string, boolean> = {
   campaign_complete: true,
   campaign_error: false,
   ai_email_ready: true,
-  ai_email_error: false,
+  ai_email_error: true,
   email_bounced: false,
   daily_digest: false,
   system_alerts: true,

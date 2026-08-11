@@ -445,6 +445,7 @@ export function isServiceError(err: unknown): boolean {
     name === "autherror" ||
     name === "authenticationerror" ||
     msg.includes("timeout") ||
+    msg.includes("aborted") ||
     msg.includes("econnrefused") ||
     msg.includes("econnreset") ||
     msg.includes("etimedout") ||

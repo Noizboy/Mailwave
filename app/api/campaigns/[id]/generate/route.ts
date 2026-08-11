@@ -66,11 +66,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // that already have a generated email and naturally picks up contacts
     // with no row yet. Used after a cancelled generation run.
   } else {
-    // Reset all non-skipped emails for a full (re-)generation; skipped emails
-    // are intentionally excluded so the user's skip decisions are preserved.
-    await prisma.campaignEmail.updateMany({
+    // Delete all non-skipped emails so they don't appear in the Generated Emails
+    // list as stale "pending" rows during regeneration. The worker creates fresh
+    // rows via upsert as each contact is processed. Skipped emails are preserved
+    // so the user's skip decisions survive a full re-generate.
+    await prisma.campaignEmail.deleteMany({
       where: { campaignId: campaign.id, NOT: { approvalStatus: "skipped" } },
-      data: { status: "pending", errorReason: null, sentAt: null },
     });
     // Reset send counters so the progress bar starts fresh
     await prisma.campaign.update({

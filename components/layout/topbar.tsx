@@ -128,6 +128,8 @@ export function TopBar({ title, actions, hideTitleOnMobile }: TopBarProps) {
         toast.success(n.title, n.body);
       } else if (n.type === "campaign.sending_complete") {
         toast.success(n.title, n.body);
+      } else if (n.type === "campaign.generation_failed") {
+        toast.error(n.title, n.body);
       }
     }
   }, [notifData]);

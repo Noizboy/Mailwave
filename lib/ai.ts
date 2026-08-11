@@ -145,7 +145,7 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code fence
   "personalizationNotes": "Brief note on how this email was personalized for this contact"
 }`;
 
-  const signal = AbortSignal.timeout(input.timeoutMs ?? 30_000);
+  const signal = AbortSignal.timeout(input.timeoutMs ?? 90_000);
   let content: string;
 
   if (input.provider === "anthropic") {

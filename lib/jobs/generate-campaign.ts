@@ -130,7 +130,7 @@ async function runGeneration(
         userId,
         campaignName: campaign.name,
         title: "AI service unreachable",
-        body: `Generation stopped for "${campaign.name}": the AI service is unavailable or timed out. Check your AI configuration and try again.`,
+        body: `Generation stopped for "${campaign.name}": ${outcome.error.message}. Check your AI configuration and try again.`,
         prefs,
       });
       return { successCount, failCount };
