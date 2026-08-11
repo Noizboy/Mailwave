@@ -99,6 +99,8 @@ export function SendingLimitsSettings() {
             <Input
               type="number"
               min={1}
+              max={2000}
+              placeholder="e.g. 50 (safe: 30–100/day)"
               value={form.dailyLimit}
               onChange={(e) => setNum("dailyLimit", e.target.value)}
             />
@@ -111,6 +113,8 @@ export function SendingLimitsSettings() {
             <Input
               type="number"
               min={1}
+              max={200}
+              placeholder="e.g. 15 (safe: 10–25/hr)"
               value={form.hourlyLimit}
               onChange={(e) => setNum("hourlyLimit", e.target.value)}
             />
@@ -124,6 +128,8 @@ export function SendingLimitsSettings() {
           <Input
             type="number"
             min={1}
+            max={100}
+            placeholder="e.g. 3 (rec. 3–5)"
             value={form.suppressAfterEmails}
             onChange={(e) => setNum("suppressAfterEmails", e.target.value)}
           />
