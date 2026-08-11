@@ -70,9 +70,8 @@ export async function POST(req: NextRequest) {
     });
 
     if (testEmail) {
-      const from = config.fromName
-        ? `"${config.fromName}" <${config.fromEmail ?? config.username ?? ""}>`
-        : (config.fromEmail ?? config.username ?? "");
+      const fromAddress = config.fromEmail ?? config.username ?? "";
+      const from = `"${config.fromName ?? ""}" <${fromAddress}>`;
 
       await transporter.sendMail({
         from,
