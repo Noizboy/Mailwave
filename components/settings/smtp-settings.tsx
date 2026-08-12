@@ -268,11 +268,18 @@ function SmtpFormFields({
           </SettingField>
         </div>
         <SettingField label="Port">
-          <Input
-            type="number"
-            value={form.port ?? 587}
-            onChange={(e) => set("port", parseInt(e.target.value))}
-          />
+          <Select
+            value={String(form.port ?? 587)}
+            onValueChange={(v) => set("port", parseInt(v))}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="587">587</SelectItem>
+              <SelectItem value="465">465</SelectItem>
+              <SelectItem value="25">25</SelectItem>
+              <SelectItem value="2525">2525</SelectItem>
+            </SelectContent>
+          </Select>
         </SettingField>
       </div>
 
