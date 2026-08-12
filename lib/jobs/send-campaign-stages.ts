@@ -231,7 +231,7 @@ export async function loadSmtpTransport(
     port: smtpConfig.port ?? 587,
     username: smtpConfig.username!,
     fromName: smtpConfig.fromName,
-    fromEmail: smtpConfig.fromEmail!,
+    fromEmail: smtpConfig.fromEmail ?? smtpConfig.username ?? "",
     replyTo: smtpConfig.replyTo,
     encryption: smtpConfig.encryption,
     hourlyLimit: smtpConfig.hourlyLimit,

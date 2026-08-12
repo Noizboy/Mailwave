@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -161,6 +161,19 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
         ? 3000
         : false,
   });
+
+  const prevStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const curr = campaign?.status;
+    if (
+      (prev === "generating" && curr !== "generating") ||
+      (prev === "sending" && curr !== "sending")
+    ) {
+      queryClient.invalidateQueries({ queryKey: ["campaign-emails", campaignId] });
+    }
+    prevStatusRef.current = curr;
+  }, [campaign?.status, campaignId, queryClient]);
 
   useEffect(() => {
     if (campaign?.status !== "sending") return;

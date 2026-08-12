@@ -47,13 +47,34 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const sendRunId = randomUUID();
   const queue = getSendQueue();
+
+  // For a fresh campaign start, compute the first interval so the first email
+  // is also spaced by the configured interval instead of going out immediately.
+  // For a resumed (paused) campaign we keep the existing nextSendAt.
+  let firstDelayMs = 0;
+  let firstNextSendAt: Date;
+  if (campaign.status === "paused") {
+    firstNextSendAt = campaign.nextSendAt ?? new Date();
+    firstDelayMs = Math.max(0, firstNextSendAt.getTime() - Date.now());
+  } else {
+    const intervalMinutes =
+      campaign.intervalType === "random"
+        ? Math.floor(
+            Math.random() * (campaign.maxInterval - campaign.minInterval + 1) +
+              campaign.minInterval
+          )
+        : campaign.minInterval;
+    firstDelayMs = intervalMinutes * 60_000;
+    firstNextSendAt = new Date(Date.now() + firstDelayMs);
+  }
+
   await prisma.campaign.update({
     where: { id: campaign.id },
     data: {
       status: "sending",
       activeSendRunId: sendRunId,
       startedAt: campaign.status === "paused" ? campaign.startedAt ?? new Date() : new Date(),
-      nextSendAt: campaign.status === "paused" ? campaign.nextSendAt : new Date(),
+      nextSendAt: firstNextSendAt,
       completedAt: null,
     },
   });
@@ -63,6 +84,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       "send",
       { campaignId: campaign.id, userId: user.id, sendRunId },
       {
+        delay: firstDelayMs > 500 ? firstDelayMs : 0,
         attempts: 1,
         jobId: `send-${campaign.id}-${sendRunId}`,
         removeOnComplete: { age: 3600 },
