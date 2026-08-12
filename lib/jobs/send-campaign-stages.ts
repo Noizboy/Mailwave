@@ -214,6 +214,15 @@ export async function loadSmtpTransport(
     return { ok: false, error: new Error(`SMTP host rejected: ${hostCheck.reason ?? "unsafe host"}`) };
   }
 
+  if (!smtpConfig.fromName?.trim()) {
+    await failRunAndNotify(
+      campaignId, sendRunId, userId, campaignName,
+      `Campaign "${campaignName}" could not be sent — From Name is not configured in SMTP settings.`,
+      prefs
+    );
+    return { ok: false, error: new Error("SMTP From Name is not configured") };
+  }
+
   const smtpPassword = decrypt(smtpConfig.encryptedPassword);
   const transporter = nodemailer.createTransport({
     host: smtpConfig.host!,
