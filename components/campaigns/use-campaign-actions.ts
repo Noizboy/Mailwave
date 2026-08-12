@@ -45,6 +45,9 @@ export interface UseCampaignActionsResult {
   /** POST /api/campaigns/:id/approve-all */
   approveAll: () => Promise<void>;
 
+  /** PATCH /api/campaigns/:id { status: "pending_review" } — rescues a failed campaign that has partial emails */
+  resumeReview: () => Promise<void>;
+
   /**
    * Transition the campaign to ready_to_send (if allReviewed) then POST
    * /api/campaigns/:id/send.
@@ -208,6 +211,26 @@ export function useCampaignActions(
     setCancellingGenerate(false);
   };
 
+  // ---- resume-review --------------------------------------------------------
+
+  const resumeReview = async () => {
+    const res = await fetch(`/api/campaigns/${campaignId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "pending_review" }),
+    });
+    if (res.ok) {
+      toast.success(
+        "Resumed review",
+        "Your generated emails are ready to review and approve."
+      );
+      invalidate();
+    } else {
+      const errMsg = await parseError(res);
+      toast.error("Could not resume review", errMsg || "An error occurred.");
+    }
+  };
+
   // ---- generate -------------------------------------------------------------
 
   const generate = async (mode?: "retry_failed" | "continue") => {
@@ -240,6 +263,7 @@ export function useCampaignActions(
   return {
     cancellingGenerate,
     approveAll,
+    resumeReview,
     send,
     pause,
     retryFailed,

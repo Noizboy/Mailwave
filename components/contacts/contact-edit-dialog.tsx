@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ListCombobox, NEW_LIST_VALUE, NO_LIST_VALUE } from "./list-combobox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
@@ -107,19 +107,22 @@ export function ContactEditDialog({ contactId, open, onOpenChange }: ContactEdit
   });
 
   const status = useWatch({ control, name: "status" }) ?? "subscribed";
-  const [listId, setListId] = useState<string>(NO_LIST_VALUE);
+  const [selectedListIds, setSelectedListIds] = useState<Set<string>>(new Set());
+  const [initialListIds, setInitialListIds] = useState<Set<string>>(new Set());
+  const [pendingAddListId, setPendingAddListId] = useState<string>(NO_LIST_VALUE);
   const [newListName, setNewListName] = useState<string>("");
   const [prevContact, setPrevContact] = useState<typeof contact>(undefined);
-  // Adjust local state when the loaded contact changes — the render-time
-  // update avoids calling setState synchronously inside an effect.
   if (contact !== prevContact) {
     setPrevContact(contact);
     if (contact) {
-      setListId(contact.listMembers[0]?.list.id ?? NO_LIST_VALUE);
+      const ids = new Set(contact.listMembers.map((m) => m.list.id));
+      setSelectedListIds(new Set(ids));
+      setInitialListIds(new Set(ids));
+      setPendingAddListId(NO_LIST_VALUE);
       setNewListName("");
     }
   }
-  const isNewList = listId === NEW_LIST_VALUE;
+  const isNewList = pendingAddListId === NEW_LIST_VALUE;
 
   useEffect(() => {
     if (contact && lists) {
@@ -140,8 +143,8 @@ export function ContactEditDialog({ contactId, open, onOpenChange }: ContactEdit
   const onSubmit = async (data: EditData) => {
     if (!contactId || !contact) return;
 
-    let targetListId: string | undefined;
-    if (listId === NEW_LIST_VALUE) {
+    let finalListIds = new Set(selectedListIds);
+    if (isNewList) {
       const name = newListName.trim();
       if (!name) {
         toast.error("List name required", "Provide a name before creating the new list.");
@@ -158,9 +161,7 @@ export function ContactEditDialog({ contactId, open, onOpenChange }: ContactEdit
         return;
       }
       const created = await listRes.json();
-      targetListId = created.id;
-    } else if (listId && listId !== NO_LIST_VALUE) {
-      targetListId = listId;
+      finalListIds = new Set([...finalListIds, created.id]);
     }
 
     const customFields: Record<string, string> = { ...(contact.customFields ?? {}) };
@@ -190,28 +191,33 @@ export function ContactEditDialog({ contactId, open, onOpenChange }: ContactEdit
       return;
     }
 
-    const currentListId = contact.listMembers[0]?.list.id;
-    if (currentListId !== targetListId) {
-      if (currentListId) {
-        await fetch(`/api/lists/${currentListId}/members`, {
+    const removed = [...initialListIds].filter((id) => !finalListIds.has(id));
+    const added = [...finalListIds].filter((id) => !initialListIds.has(id));
+    await Promise.all([
+      ...removed.map((id) =>
+        fetch(`/api/lists/${id}/members`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contactIds: [contactId] }),
-        });
-      }
-      if (targetListId) {
-        await fetch(`/api/lists/${targetListId}/members`, {
+        })
+      ),
+      ...added.map((id) =>
+        fetch(`/api/lists/${id}/members`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contactIds: [contactId] }),
-        });
-      }
-    }
+        })
+      ),
+    ]);
 
     toast.success("Contact updated", "All changes have been saved successfully.");
     queryClient.invalidateQueries({ queryKey: ["contacts"] });
     queryClient.invalidateQueries({ queryKey: ["contact", contactId] });
     queryClient.invalidateQueries({ queryKey: ["lists-for-filter"] });
+    queryClient.invalidateQueries({ queryKey: ["lists"] });
+    [...removed, ...added].forEach((id) =>
+      queryClient.invalidateQueries({ queryKey: ["list", id] })
+    );
     onOpenChange(false);
   };
 
@@ -238,7 +244,7 @@ export function ContactEditDialog({ contactId, open, onOpenChange }: ContactEdit
           </div>
         ) : (
           <form onSubmit={handleSubmit(onSubmit)}>
-            <ScrollArea className="max-h-[65vh]">
+            <div className="max-h-[70vh] overflow-y-auto">
               <div className="grid grid-cols-2 gap-4 px-1 pt-1 pb-4">
                 <div className="space-y-1.5">
                   <Label>First name <span className="text-destructive">*</span></Label>
@@ -283,11 +289,23 @@ export function ContactEditDialog({ contactId, open, onOpenChange }: ContactEdit
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Assign to list</Label>
+                  <Label>Lists</Label>
                   <ListCombobox
-                    value={listId}
-                    onValueChange={(v) => setListId(v)}
-                    lists={listsSafe}
+                    value={pendingAddListId}
+                    onValueChange={(v) => {
+                      if (v === NO_LIST_VALUE) {
+                        setPendingAddListId(NO_LIST_VALUE);
+                        return;
+                      }
+                      if (v === NEW_LIST_VALUE) {
+                        setPendingAddListId(NEW_LIST_VALUE);
+                        return;
+                      }
+                      setSelectedListIds((prev) => new Set([...prev, v]));
+                      setPendingAddListId(NO_LIST_VALUE);
+                    }}
+                    lists={listsSafe.filter((l) => !selectedListIds.has(l.id))}
+                    placeholder="Add to a list…"
                   />
                   {isNewList && (
                     <Input
@@ -297,6 +315,35 @@ export function ContactEditDialog({ contactId, open, onOpenChange }: ContactEdit
                       autoFocus
                       className="mt-2"
                     />
+                  )}
+                  {selectedListIds.size > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {[...selectedListIds].map((id) => {
+                        const list = listsSafe.find((l) => l.id === id);
+                        if (!list) return null;
+                        return (
+                          <span
+                            key={id}
+                            className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs font-medium"
+                          >
+                            {list.name}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedListIds((prev) => {
+                                  const next = new Set(prev);
+                                  next.delete(id);
+                                  return next;
+                                })
+                              }
+                              className="opacity-50 hover:opacity-100"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
                 <div className="space-y-1.5">
@@ -335,7 +382,7 @@ export function ContactEditDialog({ contactId, open, onOpenChange }: ContactEdit
                   )}
                 </div>
               </div>
-            </ScrollArea>
+            </div>
 
             <div className="mt-4 flex items-center justify-end gap-2 border-t pt-4">
               <p className="mr-auto text-xs text-muted-foreground">

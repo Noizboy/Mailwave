@@ -14,7 +14,8 @@ export interface CampaignForWizard {
   intervalType: string;
   minInterval: number;
   maxInterval: number;
-  scheduledAt?: string | null;
+  sendWindowStart?: number | null;
+  sendWindowEnd?: number | null;
   aiProvider?: string | null;
   aiModel?: string | null;
 }
@@ -32,7 +33,8 @@ export const wizardSchema = z.object({
   intervalType: z.enum(["fixed", "random"]),
   minInterval: z.number().int().min(1),
   maxInterval: z.number().int().min(1),
-  scheduledAt: z.string().optional(),
+  sendWindowStart: z.number().int().min(0).max(23).nullable().optional(),
+  sendWindowEnd: z.number().int().min(0).max(23).nullable().optional(),
   aiProvider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom", ""]).optional(),
   aiModel: z.string().optional(),
 });
@@ -56,7 +58,7 @@ export const STEPS = [
 export const stepFields: Record<number, Array<keyof WizardData>> = {
   1: ["name", "listId"],
   2: ["goal", "product", "cta", "tone", "language", "emailLength", "systemPrompt"],
-  3: ["intervalType", "minInterval", "maxInterval", "scheduledAt"],
+  3: ["intervalType", "minInterval", "maxInterval", "sendWindowStart", "sendWindowEnd"],
 };
 
 export async function fetchLists(): Promise<ListOption[]> {

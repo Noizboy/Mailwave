@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent, CardFooter } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -20,6 +22,7 @@ import type { EmailRecord, EmailsResponse } from "./report-types";
 interface EmailTableProps {
   data: EmailsResponse | undefined;
   isLoading: boolean;
+  hasFilters: boolean;
   page: number;
   perPage: number;
   onPageChange: (page: number) => void;
@@ -29,6 +32,7 @@ interface EmailTableProps {
 export function EmailTable({
   data,
   isLoading,
+  hasFilters,
   page,
   perPage,
   onPageChange,
@@ -36,89 +40,95 @@ export function EmailTable({
 }: EmailTableProps) {
   return (
     <>
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="space-y-2 p-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
-            </div>
-          ) : !data || data.emails.length === 0 ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">
-              No email records found.
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : !data || data.emails.length === 0 ? (
+          hasFilters ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              No email records match your filters.
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Campaign</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Sent Date</TableHead>
-                  <TableHead>Error</TableHead>
-                  <TableHead className="text-right">View</TableHead>
+            <EmptyState
+              icon={Mail}
+              title="No email records yet"
+              description="Generated and sent emails appear here once a campaign runs."
+            />
+          )
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Campaign</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Sent Date</TableHead>
+                <TableHead>Error</TableHead>
+                <TableHead className="text-right">View</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.emails.map((e) => (
+                <TableRow key={e.id}>
+                  <TableCell>
+                    <Link
+                      href={`/campaigns/${e.campaign.id}`}
+                      className="text-sm font-medium text-foreground transition-colors hover:text-primary"
+                    >
+                      {e.campaign.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {[e.contact.firstName, e.contact.lastName]
+                      .filter(Boolean)
+                      .join(" ") || "—"}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {e.contact.email}
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={e.status} />
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {e.sentAt ? formatDateTime(e.sentAt) : "—"}
+                  </TableCell>
+                  <TableCell className="max-w-[180px] truncate text-xs text-destructive">
+                    {e.errorReason ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0"
+                      onClick={() => onSelectEmail(e)}
+                    >
+                      View
+                    </Button>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.emails.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell>
-                      <Link
-                        href={`/campaigns/${e.campaign.id}`}
-                        className="text-sm font-medium text-foreground transition-colors hover:text-primary"
-                      >
-                        {e.campaign.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {[e.contact.firstName, e.contact.lastName]
-                        .filter(Boolean)
-                        .join(" ") || "—"}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {e.contact.email}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={e.status} />
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {e.sentAt ? formatDateTime(e.sentAt) : "—"}
-                    </TableCell>
-                    <TableCell className="max-w-[180px] truncate text-xs text-destructive">
-                      {e.errorReason ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="h-auto p-0"
-                        onClick={() => onSelectEmail(e)}
-                      >
-                        View
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
 
-      {data && data.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
+      {data && data.total > 0 && (
+        <CardFooter className="justify-between text-xs text-muted-foreground">
+          <div>
             Showing {(page - 1) * perPage + 1}–
             {Math.min(page * perPage, data.total)} of {data.total}
-          </span>
+          </div>
           <DataPagination
             page={page}
             totalPages={data.totalPages}
             onPageChange={onPageChange}
           />
-        </div>
+        </CardFooter>
       )}
     </>
   );

@@ -29,6 +29,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         },
         orderBy: { addedAt: "desc" },
       },
+      campaigns: {
+        select: { id: true, name: true, status: true },
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
 
@@ -71,16 +75,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = await params;
 
-  const campaignCount = await prisma.campaign.count({
+  await prisma.campaign.updateMany({
     where: { listId: id, userId: user.id },
+    data: { listId: null },
   });
-
-  if (campaignCount > 0) {
-    return NextResponse.json(
-      { error: `Cannot delete list: ${campaignCount} campaign(s) are using it. Delete or reassign those campaigns first.` },
-      { status: 409 }
-    );
-  }
 
   await prisma.list.deleteMany({
     where: { id, userId: user.id },

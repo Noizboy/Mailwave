@@ -10,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FilterBar } from "@/components/shared/filter-bar";
 
 interface EmailFilterBarProps {
   qInput: string;
@@ -38,13 +37,13 @@ export function EmailFilterBar({
   onPerPageChange,
 }: EmailFilterBarProps) {
   return (
-    <FilterBar>
-      {/* Search — left, grows */}
-      <div className="relative min-w-[200px] flex-1">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+    <>
+      {/* Search — grows */}
+      <div className="relative min-w-[240px] flex-1">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
-          className="pl-8 pr-8"
-          placeholder="Search contact or email..."
+          className="pl-9 pr-8"
+          placeholder="Search contact or email…"
           value={qInput}
           onChange={(e) => onQInputChange(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && onSearch()}
@@ -60,15 +59,12 @@ export function EmailFilterBar({
         )}
       </div>
 
-      {/* Separator */}
-      <div className="hidden h-6 w-px bg-border sm:block" />
-
       {/* Status filter */}
       <Select
         value={filterStatus || "__all__"}
         onValueChange={(v) => onStatusChange(v === "__all__" ? "" : v)}
       >
-        <SelectTrigger className="w-[140px]">
+        <SelectTrigger className="w-[160px]">
           <SelectValue placeholder="All statuses" />
         </SelectTrigger>
         <SelectContent>
@@ -109,6 +105,6 @@ export function EmailFilterBar({
           </SelectContent>
         </Select>
       </div>
-    </FilterBar>
+    </>
   );
 }

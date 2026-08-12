@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
 
 interface ContactList {
@@ -33,7 +36,7 @@ interface BulkAssignListDialogProps {
   onSuccess: () => void;
 }
 
-const NEW_LIST_VALUE = "__new__";
+const NEW_LIST_ID = "__new__";
 
 export function BulkAssignListDialog({
   open,
@@ -42,7 +45,8 @@ export function BulkAssignListDialog({
   onSuccess,
 }: BulkAssignListDialogProps) {
   const queryClient = useQueryClient();
-  const [listId, setListId] = useState<string>("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [newListChecked, setNewListChecked] = useState(false);
   const [newListName, setNewListName] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -52,18 +56,33 @@ export function BulkAssignListDialog({
     enabled: open,
   });
 
-  const isNewList = listId === NEW_LIST_VALUE;
+  const toggleList = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const hasSelection = selectedIds.size > 0 || newListChecked;
 
   const handleSubmit = async () => {
-    let targetListId = listId;
+    if (!hasSelection) {
+      toast.error("No list selected", "Choose at least one list to assign the contacts to.");
+      return;
+    }
 
-    if (isNewList) {
+    setIsSubmitting(true);
+
+    let finalIds = new Set(selectedIds);
+
+    if (newListChecked) {
       const name = newListName.trim();
       if (!name) {
         toast.error("List name required", "Provide a name before creating the new list.");
+        setIsSubmitting(false);
         return;
       }
-      setIsSubmitting(true);
       const res = await fetch("/api/lists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,41 +95,41 @@ export function BulkAssignListDialog({
         return;
       }
       const created = await res.json();
-      targetListId = created.id;
-    } else {
-      if (!targetListId) {
-        toast.error("No list selected", "Choose a list to assign the contacts to.");
-        return;
-      }
-      setIsSubmitting(true);
+      finalIds = new Set([...finalIds, created.id]);
     }
 
-    const res = await fetch(`/api/lists/${targetListId}/members`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contactIds }),
-    });
+    const results = await Promise.all(
+      [...finalIds].map((id) =>
+        fetch(`/api/lists/${id}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contactIds }),
+        })
+      )
+    );
 
     setIsSubmitting(false);
 
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      toast.error("Could not assign contacts", d.error || "An unexpected error occurred. Try again.");
+    if (results.some((r) => !r.ok)) {
+      toast.error("Some assignments failed", "One or more lists could not be updated. Try again.");
       return;
     }
 
-    toast.success(`${contactIds.length} contact${contactIds.length === 1 ? "" : "s"} assigned`, "They have been added to the selected list.");
-    setListId("");
-    setNewListName("");
-    onOpenChange(false);
+    const listCount = finalIds.size;
+    toast.success(
+      `${contactIds.length} contact${contactIds.length === 1 ? "" : "s"} assigned`,
+      `Added to ${listCount} list${listCount === 1 ? "" : "s"}.`
+    );
+    handleOpenChange(false);
+    [...finalIds].forEach((id) => queryClient.invalidateQueries({ queryKey: ["list", id] }));
     queryClient.invalidateQueries({ queryKey: ["lists"] });
-    queryClient.invalidateQueries({ queryKey: ["list", targetListId] });
     onSuccess();
   };
 
   const handleOpenChange = (o: boolean) => {
     if (!o) {
-      setListId("");
+      setSelectedIds(new Set());
+      setNewListChecked(false);
       setNewListName("");
     }
     onOpenChange(o);
@@ -120,40 +139,45 @@ export function BulkAssignListDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Assign to List</DialogTitle>
+          <DialogTitle>Assign to Lists</DialogTitle>
           <DialogDescription>
-            Add {contactIds.length} selected contact{contactIds.length === 1 ? "" : "s"} to a list.
+            Add {contactIds.length} selected contact{contactIds.length === 1 ? "" : "s"} to one or more lists.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 py-1">
-          <div className="space-y-1.5">
-            <Label>List</Label>
-            <select
-              value={listId}
-              onChange={(e) => setListId(e.target.value)}
-              className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background"
-            >
-              <option value="">Select a list…</option>
+        <div className="space-y-2 py-1">
+          <Label>Lists</Label>
+          <ScrollArea className={lists.length > 6 ? "h-48" : undefined}>
+            <div className="space-y-1">
               {lists.map((l) => (
-                <option key={l.id} value={l.id}>
+                <label
+                  key={l.id}
+                  className="flex cursor-pointer items-center gap-2.5 rounded px-2 py-1.5 text-sm hover:bg-muted"
+                >
+                  <Checkbox
+                    checked={selectedIds.has(l.id)}
+                    onCheckedChange={() => toggleList(l.id)}
+                  />
                   {l.name}
-                </option>
+                </label>
               ))}
-              <option value={NEW_LIST_VALUE}>+ New list…</option>
-            </select>
-          </div>
-
-          {isNewList && (
-            <div className="space-y-1.5">
-              <Label>New list name</Label>
-              <Input
-                value={newListName}
-                onChange={(e) => setNewListName(e.target.value)}
-                placeholder="e.g. Q3 Prospects"
-                autoFocus
-              />
+              <label className="flex cursor-pointer items-center gap-2.5 rounded px-2 py-1.5 text-sm hover:bg-muted">
+                <Checkbox
+                  checked={newListChecked}
+                  onCheckedChange={(v) => setNewListChecked(!!v)}
+                />
+                <span className="text-muted-foreground">+ New list…</span>
+              </label>
             </div>
+          </ScrollArea>
+
+          {newListChecked && (
+            <Input
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              placeholder="e.g. Q3 Prospects"
+              autoFocus
+            />
           )}
         </div>
 
@@ -161,7 +185,7 @@ export function BulkAssignListDialog({
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
+          <Button onClick={handleSubmit} disabled={isSubmitting || !hasSelection}>
             {isSubmitting ? "Assigning…" : "Assign"}
           </Button>
         </DialogFooter>

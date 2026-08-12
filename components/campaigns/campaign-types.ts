@@ -38,7 +38,7 @@ export interface CampaignDetail {
   pendingCount: number;
   approvalPendingCount: number;
   skippedCount: number;
-  list: { id: string; name: string };
+  list: { id: string; name: string } | null;
   goal: string | null;
   product: string | null;
   cta: string | null;
@@ -51,11 +51,12 @@ export interface CampaignDetail {
   intervalType: string;
   minInterval: number;
   maxInterval: number;
+  sendWindowStart: number | null;
+  sendWindowEnd: number | null;
   startedAt: string | null;
   nextSendAt: string | null;
   updatedAt: string;
   createdAt: string;
-  scheduledAt: string | null;
   emails: CampaignEmail[];
 }
 

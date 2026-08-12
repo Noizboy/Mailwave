@@ -36,6 +36,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
+  if (!campaign.listId) {
+    return NextResponse.json(
+      { error: "No contact list assigned to this campaign. Please select a list before generating." },
+      { status: 422 }
+    );
+  }
+
   const aiConfig = await prisma.aiConfig.findFirst({
     where: {
       userId: user.id,

@@ -56,13 +56,14 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
   const submitCampaign = async (data: WizardData) => {
     if (step !== 4) return;
     setSubmitting(true);
-    const payload = { ...data, aiProvider: data.aiProvider || undefined, aiModel: data.aiModel || undefined, scheduledAt: data.scheduledAt || undefined, status: "pending" as const };
+    const payload = { ...data, aiProvider: data.aiProvider || undefined, aiModel: data.aiModel || undefined, status: "pending" as const };
     const url = campaign ? `/api/campaigns/${campaign.id}` : "/api/campaigns";
     const res = await fetch(url, { method: campaign ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     if (res.ok) {
       const destinationId = campaign?.id ?? (await res.json()).id;
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
       if (campaign) queryClient.invalidateQueries({ queryKey: ["campaign", campaign.id] });
+      if (data.listId) queryClient.invalidateQueries({ queryKey: ["list", data.listId] });
       toast.success(campaign ? "Campaign updated" : "Campaign created", campaign ? "Your campaign is ready. Generate emails to get started." : "Your campaign has been saved. Generate emails to get started.");
       router.push(`/campaigns/${destinationId}`);
     } else if (res.status === 409) {
@@ -93,9 +94,9 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
 }
 
 function campaignValues(campaign: CampaignForWizard): WizardData {
-  return { name: campaign.name, listId: campaign.listId, goal: campaign.goal ?? "", product: campaign.product ?? "", cta: campaign.cta ?? "", tone: campaign.tone ?? "professional", language: campaign.language ?? "en", emailLength: campaign.emailLength ?? "medium", systemPrompt: campaign.systemPrompt ?? "", intervalType: (campaign.intervalType as "fixed" | "random") ?? "random", minInterval: campaign.minInterval ?? 3, maxInterval: campaign.maxInterval ?? 8, scheduledAt: campaign.scheduledAt ?? "", aiProvider: (campaign.aiProvider as WizardData["aiProvider"]) ?? "", aiModel: campaign.aiModel ?? "" };
+  return { name: campaign.name, listId: campaign.listId, goal: campaign.goal ?? "", product: campaign.product ?? "", cta: campaign.cta ?? "", tone: campaign.tone ?? "professional", language: campaign.language ?? "en", emailLength: campaign.emailLength ?? "medium", systemPrompt: campaign.systemPrompt ?? "", intervalType: (campaign.intervalType as "fixed" | "random") ?? "random", minInterval: campaign.minInterval ?? 3, maxInterval: campaign.maxInterval ?? 8, sendWindowStart: campaign.sendWindowStart ?? null, sendWindowEnd: campaign.sendWindowEnd ?? null, aiProvider: (campaign.aiProvider as WizardData["aiProvider"]) ?? "", aiModel: campaign.aiModel ?? "" };
 }
 
 function newCampaignValues(listId: string): WizardData {
-  return { name: "", listId, goal: "", product: "", cta: "", tone: "professional", language: "en", emailLength: "medium", systemPrompt: "", intervalType: "random", minInterval: 3, maxInterval: 8, scheduledAt: "", aiProvider: "", aiModel: "" };
+  return { name: "", listId, goal: "", product: "", cta: "", tone: "professional", language: "en", emailLength: "medium", systemPrompt: "", intervalType: "random", minInterval: 3, maxInterval: 8, sendWindowStart: null, sendWindowEnd: null, aiProvider: "", aiModel: "" };
 }

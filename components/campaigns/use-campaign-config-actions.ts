@@ -46,6 +46,8 @@ export interface SendingConfigPayload {
   intervalType: "fixed" | "random";
   minInterval: number;
   maxInterval: number;
+  sendWindowStart: number | null;
+  sendWindowEnd: number | null;
 }
 
 // ---------------------------------------------------------------------------

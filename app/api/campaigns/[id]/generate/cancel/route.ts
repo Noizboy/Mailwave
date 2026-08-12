@@ -21,9 +21,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // If some emails were already generated, keep them reviewable
   const [generatedCount, memberCount] = await Promise.all([
     prisma.campaignEmail.count({ where: { campaignId: id, status: "generated" } }),
-    prisma.listMember.count({
-      where: { listId: campaign.listId, contact: { userId: user.id, status: "subscribed" } },
-    }),
+    campaign.listId
+      ? prisma.listMember.count({
+          where: { listId: campaign.listId, contact: { userId: user.id, status: "subscribed" } },
+        })
+      : Promise.resolve(0),
   ]);
 
   const targetStatus = generatedCount > 0 ? "pending_review" : "pending";

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { CreateCampaignWizard } from "@/components/campaigns/create-campaign-wizard";
 import { TopBar } from "@/components/layout/topbar";
@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Clock,
   MinusCircle,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -34,6 +35,8 @@ import { AiInstructionsPanel } from "./campaign-config-panels";
 import { SendingConfigPanel } from "./campaign-config-panels";
 import { EmailReview } from "./email-review";
 import { useCampaignActions } from "./use-campaign-actions";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { toast } from "@/hooks/use-toast";
 
 // ---------------------------------------------------------------------------
 // Fetchers
@@ -106,11 +109,15 @@ function StatChip({
 
 export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const {
     cancellingGenerate,
     approveAll: handleApproveAll,
+    resumeReview: handleResumeReview,
     send: handleSendAction,
     pause: handlePause,
     retryFailed: handleRetryFailed,
@@ -118,6 +125,18 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     cancelGenerate: handleCancelGenerate,
     generate: handleGenerate,
   } = useCampaignActions(campaignId);
+
+  const handleDelete = async () => {
+    const res = await fetch(`/api/campaigns/${campaignId}`, { method: "DELETE" });
+    if (res.ok) {
+      toast.success("Campaign deleted", "The campaign has been permanently removed.");
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["lists"] });
+      router.push("/campaigns");
+    } else {
+      toast.error("Delete failed", "Could not delete the campaign.");
+    }
+  };
 
   const { data: campaign, isLoading: campaignLoading } = useQuery({
     queryKey: ["campaign", campaignId],
@@ -178,7 +197,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
         campaign={{
           id: campaign.id,
           name: campaign.name,
-          listId: campaign.list.id,
+          listId: campaign.list?.id ?? "",
           goal: campaign.goal,
           product: campaign.product,
           cta: campaign.cta,
@@ -189,7 +208,8 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
           intervalType: campaign.intervalType,
           minInterval: campaign.minInterval,
           maxInterval: campaign.maxInterval,
-          scheduledAt: campaign.scheduledAt,
+          sendWindowStart: campaign.sendWindowStart,
+          sendWindowEnd: campaign.sendWindowEnd,
           aiProvider: campaign.aiProvider,
           aiModel: campaign.aiModel,
         }}
@@ -210,7 +230,8 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   ).length;
 
 
-  const canGenerate = ["pending", "failed"].includes(campaign.status);
+  const canGenerate = ["pending", "failed"].includes(campaign.status) && !!campaign.list;
+  const canResumeReview = campaign.status === "failed" && campaign.pendingCount > 0;
   const canRetryGeneration =
     campaign.status === "pending_review" && campaign.failedCount > 0;
   // True when generation was cancelled mid-way: some contacts have no email row yet.
@@ -219,8 +240,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     campaign.totalEmails > 0 &&
     campaign.emails.length < campaign.totalEmails;
   const canRegenerate =
-    ["pending_review", "ready_to_send"].includes(campaign.status) &&
-    campaign.failedCount === 0;
+    ["pending_review", "ready_to_send"].includes(campaign.status);
   const allReviewed =
     emails.length > 0 &&
     campaign.status === "pending_review" &&
@@ -331,11 +351,23 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                   </Button>
                 ) : (
                   <>
+                    {canResumeReview && (
+                      <Button size="sm" onClick={handleResumeReview}>
+                        <CheckCheck className="h-4 w-4" />
+                        Resume Review
+                      </Button>
+                    )}
                     {canGenerate && (
-                      <Button size="sm" onClick={() => handleGenerate()}>
+                      <Button
+                        size="sm"
+                        onClick={() => handleGenerate()}
+                        variant={canResumeReview ? "outline" : "default"}
+                      >
                         <Play className="h-4 w-4" />
                         {campaign.status === "completed"
                           ? "Re-Generate Emails"
+                          : canResumeReview
+                          ? "Re-Generate All"
                           : "Generate Emails"}
                       </Button>
                     )}
@@ -413,6 +445,15 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                         Cancel
                       </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </Button>
                   </>
                 )}
               </div>
@@ -442,8 +483,11 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                   Generation failed
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  The AI service returned an error or no eligible contacts were
-                  found. Check your AI settings and try again.
+                  {!campaign.list
+                    ? "No contact list is assigned to this campaign. Assign a list and try again."
+                    : campaign.pendingCount > 0
+                    ? `${campaign.pendingCount} email${campaign.pendingCount !== 1 ? "s were" : " was"} generated before the error. Resume review to keep them, or re-generate all to start fresh.`
+                    : "The AI service returned an error or no eligible contacts were found in the list. Check your AI settings and try again."}
                 </p>
               </div>
             </div>
@@ -557,6 +601,15 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
 
         </div>
       </main>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title={`Delete "${campaign.name}"?`}
+        description="This will permanently remove the campaign along with all its generated emails and send history. This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

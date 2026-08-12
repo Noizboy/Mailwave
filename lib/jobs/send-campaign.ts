@@ -7,6 +7,7 @@ import {
   claimSendRun,
   loadSmtpTransport,
   loadSuppressAfterEmails,
+  loadUserTimezone,
   loadPendingEmails,
   loadRateLimitCounts,
   decideContinuation,
@@ -73,9 +74,12 @@ export async function processSend(job: Job<SendCampaignJobData>): Promise<SendRu
   }
   const { smtpSettings, transporter } = smtp;
 
-  const suppressAfterEmails = await loadSuppressAfterEmails(userId);
-  const pendingEmails = await loadPendingEmails(campaignId);
-  const rateLimitCounts = await loadRateLimitCounts(userId);
+  const [suppressAfterEmails, userTimezone, pendingEmails, rateLimitCounts] = await Promise.all([
+    loadSuppressAfterEmails(userId),
+    loadUserTimezone(userId),
+    loadPendingEmails(campaignId),
+    loadRateLimitCounts(userId),
+  ]);
   // Capture the window starts once so the rate-limit decision uses the same
   // boundaries that produced the snapshot counts above.
   const rateLimitWindowStart = {
@@ -103,6 +107,7 @@ export async function processSend(job: Job<SendCampaignJobData>): Promise<SendRu
       smtpSettings,
       rateLimitCounts,
       rateLimitWindowStart,
+      userTimezone,
     });
 
     if (decision.action === "stop") {

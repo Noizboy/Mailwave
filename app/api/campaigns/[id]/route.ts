@@ -59,9 +59,10 @@ const patchSchema = z.object({
   intervalType: z.enum(["fixed", "random"]).optional(),
   minInterval: z.number().int().min(1).optional(),
   maxInterval: z.number().int().min(1).optional(),
+  sendWindowStart: z.number().int().min(0).max(23).nullable().optional(),
+  sendWindowEnd: z.number().int().min(0).max(23).nullable().optional(),
   aiProvider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom"]).nullable().optional(),
   aiModel: z.string().nullable().optional(),
-  scheduledAt: z.string().datetime().nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -73,14 +74,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json();
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 });
   }
 
-  const { scheduledAt, ...rest } = parsed.data;
-
-  if (rest.name) {
+  if (parsed.data.name) {
     const duplicate = await prisma.campaign.findFirst({
-      where: { userId: user.id, name: rest.name, NOT: { id } },
+      where: { userId: user.id, name: parsed.data.name, NOT: { id } },
       select: { id: true },
     });
     if (duplicate) {
@@ -90,10 +89,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const updated = await prisma.campaign.updateMany({
     where: { id, userId: user.id },
-    data: {
-      ...rest,
-      ...(scheduledAt !== undefined ? { scheduledAt: scheduledAt ? new Date(scheduledAt) : null } : {}),
-    },
+    data: parsed.data,
   });
 
   if (updated.count === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });

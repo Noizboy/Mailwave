@@ -21,7 +21,7 @@ export type NotifPrefs = Record<string, boolean>;
 export type GenerateCampaignRef = {
   id: string;
   name: string;
-  listId: string;
+  listId: string | null;
   goal: string | null;
   product: string | null;
   cta: string | null;
@@ -116,6 +116,7 @@ export async function loadEligibleContacts(
   campaign: GenerateCampaignRef,
   userId: string
 ): Promise<EligibleContact[]> {
+  if (!campaign.listId) return [];
   const members = await prisma.listMember.findMany({
     where: {
       listId: campaign.listId,

@@ -12,6 +12,7 @@ model User {
   email                   String                   @unique
   passwordHash            String
   name                    String?
+  timezone                String                   @default("UTC")
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   aiConfig                AiConfig?
@@ -152,7 +153,7 @@ model Campaign {
   userId          String
 
   name            String
-  listId          String
+  listId          String?
   goal            String?
   product         String?
   cta             String?
@@ -164,7 +165,8 @@ model Campaign {
   maxInterval     Int             @default(8)
   dailyLimit      Int             @default(100)
   hourlyLimit     Int             @default(20)
-  scheduledAt     DateTime?
+  sendWindowStart Int?
+  sendWindowEnd   Int?
   aiProvider      AiProvider?
   aiModel         String?
   status          CampaignStatus  @default(pending)
@@ -180,7 +182,8 @@ model Campaign {
   systemPrompt    String?
   nextSendAt      DateTime?
   activeSendRunId String?
-  list            List            @relation(fields: [listId], references: [id])
+
+  list            List?           @relation(fields: [listId], references: [id])
   user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   emails          CampaignEmail[]
 

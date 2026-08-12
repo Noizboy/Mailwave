@@ -27,17 +27,18 @@ interface ListComboboxProps {
   value: string;
   onValueChange: (value: string) => void;
   lists: ContactListOption[];
+  placeholder?: string;
 }
 
-export function ListCombobox({ value, onValueChange, lists }: ListComboboxProps) {
+export function ListCombobox({ value, onValueChange, lists, placeholder = "No list" }: ListComboboxProps) {
   const [open, setOpen] = useState(false);
 
   const selectedLabel =
     value === NEW_LIST_VALUE
       ? "+ New list…"
       : value && value !== NO_LIST_VALUE
-      ? (lists.find((l) => l.id === value)?.name ?? "No list")
-      : "No list";
+      ? (lists.find((l) => l.id === value)?.name ?? placeholder)
+      : placeholder;
 
   const handleSelect = (selected: string) => {
     onValueChange(selected);

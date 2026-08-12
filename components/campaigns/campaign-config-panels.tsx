@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,22 @@ import {
   EMAIL_LENGTH_LABELS,
 } from "./campaign-types";
 import { useCampaignConfigActions } from "./use-campaign-config-actions";
+
+// ---------------------------------------------------------------------------
+// Hour formatting helpers (sending time window)
+// ---------------------------------------------------------------------------
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => {
+  const period = h < 12 ? "AM" : "PM";
+  const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return { value: h, label: `${display}:00 ${period} ` };
+});
+
+function formatHour(h: number): string {
+  const period = h < 12 ? "AM" : "PM";
+  const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${display}:00 ${period}`;
+}
 
 // ---------------------------------------------------------------------------
 // Shared display primitive
@@ -144,12 +161,16 @@ export function CampaignDetailsPanel({
         {open && (
           <div className="border-t px-5 py-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 md:grid-cols-3">
             <InfoField label="LIST">
-              <Link
-                href={`/lists/${campaign.list.id}`}
-                className="text-primary hover:underline"
-              >
-                {campaign.list.name}
-              </Link>
+              {campaign.list ? (
+                <Link
+                  href={`/lists/${campaign.list.id}`}
+                  className="text-primary hover:underline"
+                >
+                  {campaign.list.name}
+                </Link>
+              ) : (
+                "—"
+              )}
             </InfoField>
             <InfoField label="GOAL">{campaign.goal || "—"}</InfoField>
             <InfoField label="PRODUCT">{campaign.product || "—"}</InfoField>
@@ -157,11 +178,6 @@ export function CampaignDetailsPanel({
             <InfoField label="CREATED">
               {new Date(campaign.createdAt).toLocaleDateString()}
             </InfoField>
-            {campaign.scheduledAt && (
-              <InfoField label="SCHEDULED">
-                {new Date(campaign.scheduledAt).toLocaleString()}
-              </InfoField>
-            )}
           </div>
         )}
       </div>
@@ -450,6 +466,9 @@ export function SendingConfigPanel({
   );
   const [minInterval, setMinInterval] = useState(3);
   const [maxInterval, setMaxInterval] = useState(8);
+  const [windowEnabled, setWindowEnabled] = useState(false);
+  const [windowStart, setWindowStart] = useState(8);
+  const [windowEnd, setWindowEnd] = useState(17);
 
   const { savingSending: saving, saveSendingConfig } =
     useCampaignConfigActions(campaignId);
@@ -459,6 +478,14 @@ export function SendingConfigPanel({
     setIntervalType(campaign.intervalType as "fixed" | "random");
     setMinInterval(campaign.minInterval);
     setMaxInterval(campaign.maxInterval);
+    const hasWindow =
+      campaign.sendWindowStart !== null &&
+      campaign.sendWindowStart !== undefined &&
+      campaign.sendWindowEnd !== null &&
+      campaign.sendWindowEnd !== undefined;
+    setWindowEnabled(hasWindow);
+    setWindowStart(campaign.sendWindowStart ?? 8);
+    setWindowEnd(campaign.sendWindowEnd ?? 17);
     setEditOpen(true);
   };
 
@@ -467,6 +494,8 @@ export function SendingConfigPanel({
       intervalType,
       minInterval,
       maxInterval: intervalType === "random" ? maxInterval : minInterval,
+      sendWindowStart: windowEnabled ? windowStart : null,
+      sendWindowEnd: windowEnabled ? windowEnd : null,
     });
     if (ok) {
       setEditOpen(false);
@@ -511,7 +540,7 @@ export function SendingConfigPanel({
           </div>
         </div>
         {open && (
-          <div className="border-t px-5 py-4">
+          <div className="border-t px-5 py-4 space-y-4">
             {campaign.intervalType === "fixed" ? (
               <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                 <InfoField label="INTERVAL TYPE">Fixed</InfoField>
@@ -530,6 +559,16 @@ export function SendingConfigPanel({
                 </InfoField>
               </div>
             )}
+            <div>
+              <InfoField label="SENDING WINDOW">
+                {campaign.sendWindowStart !== null &&
+                campaign.sendWindowStart !== undefined &&
+                campaign.sendWindowEnd !== null &&
+                campaign.sendWindowEnd !== undefined
+                  ? `${formatHour(campaign.sendWindowStart)} – ${formatHour(campaign.sendWindowEnd)}`
+                  : "No restriction"}
+              </InfoField>
+            </div>
           </div>
         )}
       </div>
@@ -637,6 +676,67 @@ export function SendingConfigPanel({
                 </p>
               </div>
             )}
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Sending time window</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Restrict sending to specific UTC hours each day.
+                  </p>
+                </div>
+                <Switch
+                  checked={windowEnabled}
+                  onCheckedChange={(checked) => {
+                    setWindowEnabled(checked);
+                    if (checked) {
+                      setWindowStart(campaign.sendWindowStart ?? 8);
+                      setWindowEnd(campaign.sendWindowEnd ?? 17);
+                    }
+                  }}
+                />
+              </div>
+              {windowEnabled && (
+                <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">From</Label>
+                    <Select
+                      value={String(windowStart)}
+                      onValueChange={(v) => setWindowStart(Number(v))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {HOUR_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={String(opt.value)}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">To</Label>
+                    <Select
+                      value={String(windowEnd)}
+                      onValueChange={(v) => setWindowEnd(Number(v))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {HOUR_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={String(opt.value)}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div className="border-t p-6">
             <Button onClick={save} disabled={saving} className="w-full">

@@ -9,7 +9,10 @@ export function useContactActions(selectedIds: Set<string>, clearSelection: () =
   const [showChangeStatus, setShowChangeStatus] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [editContactId, setEditContactId] = useState<string | null>(null);
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["contacts"] });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    queryClient.invalidateQueries({ queryKey: ["lists"] });
+  };
   const deleteContact = async () => { if (!deleteTargetId) return; const res = await fetch(`/api/contacts/${deleteTargetId}`, { method: "DELETE" }); if (res.ok) { toast.success("Contact deleted", "The contact has been permanently removed."); invalidate(); } setDeleteTargetId(null); };
   const deleteSelected = async () => { const count = selectedIds.size; await Promise.all([...selectedIds].map((id) => fetch(`/api/contacts/${id}`, { method: "DELETE" }))); toast.success(`${count} contact${count === 1 ? "" : "s"} deleted`, "They have been permanently removed from your account."); clearSelection(); setShowBulkDeleteConfirm(false); invalidate(); };
   const completeBulkAction = () => { clearSelection(); invalidate(); };

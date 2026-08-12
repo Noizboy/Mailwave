@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageHeader } from "@/components/shared/page-header";
+import { FilterBar } from "@/components/shared/filter-bar";
 import { fetchReports, fetchEmails } from "./report-api";
-import { SummaryMetrics, EmailStatsChips } from "./summary-metrics";
+import { SummaryMetrics } from "./summary-metrics";
 import { CampaignTable } from "./campaign-table";
 import { CampaignFilterBar } from "./campaign-filter-bar";
 import { EmailFilterBar } from "./email-filter-bar";
@@ -19,9 +18,10 @@ import type { EmailRecord } from "./report-types";
 export function ReportsClient() {
   const [activeView, setActiveView] = useState<"campaigns" | "emails">("campaigns");
 
-  // Campaigns tab pagination
+  // Campaigns tab
   const [campaignsPage, setCampaignsPage] = useState(1);
   const [campaignsPerPage, setCampaignsPerPage] = useState(50);
+  const [campaignSearch, setCampaignSearch] = useState("");
 
   // Emails tab
   const [emailPage, setEmailPage] = useState(1);
@@ -49,10 +49,6 @@ export function ReportsClient() {
     enabled: activeView === "emails",
   });
 
-  const handleExport = () => {
-    window.open("/api/reports/export", "_blank");
-  };
-
   const applySearch = () => {
     setFilterQ(qInput);
     setEmailPage(1);
@@ -76,6 +72,11 @@ export function ReportsClient() {
     setEmailPage(1);
   };
 
+  const handleCampaignSearchChange = (value: string) => {
+    setCampaignSearch(value);
+    setCampaignsPage(1);
+  };
+
   const handleCampaignsPerPageChange = (perPage: number) => {
     setCampaignsPerPage(perPage);
     setCampaignsPage(1);
@@ -89,63 +90,41 @@ export function ReportsClient() {
   if (reportsLoading || !reportsData) {
     return (
       <div className="space-y-4 p-6">
-        <Skeleton className="h-12 w-1/3" />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          {Array.from({ length: 7 }).map((_, i) => (
             <Skeleton key={i} className="h-24" />
           ))}
         </div>
-        <Skeleton className="h-64" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-80 w-full" />
       </div>
     );
   }
 
   const { summary, campaigns } = reportsData;
-  const emailStats = emailsData?.stats;
+  const hasEmailFilters = filterStatus !== "" || filterQ !== "";
+  const filteredCampaigns = campaigns.filter((c) =>
+    c.name.toLowerCase().includes(campaignSearch.toLowerCase())
+  );
 
   return (
     <div>
-      {/* Non-sticky: page header + metrics */}
-      <div className="space-y-6 p-6 pb-4">
-        <PageHeader
-          title="Reports"
-          description="Detailed view of your sending activity."
-          actions={
-            <Button variant="outline" onClick={handleExport}>
-              <Download className="h-4 w-4" />
-              Export CSV
-            </Button>
-          }
-        />
+      {/* Account-wide summary */}
+      <div className="p-6 pb-0">
         <SummaryMetrics summary={summary} />
       </div>
 
-      {/* Sticky: tabs + filter bars */}
-      <div className="sticky top-0 z-10 border-b bg-background">
-        <div className="px-6 py-2">
-          <Tabs
-            value={activeView}
-            onValueChange={(v) => setActiveView(v as "campaigns" | "emails")}
-          >
-            <TabsList>
-              <TabsTrigger value="campaigns">Campaign Breakdown</TabsTrigger>
-              <TabsTrigger value="emails">Email Records</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-
-        {activeView === "campaigns" && (
-          <div className="border-t px-6 py-3">
+      {/* Sticky filter bar — sits below the metrics */}
+      <div className="sticky top-0 z-10 border-b bg-background px-6 py-3">
+        <FilterBar>
+          {activeView === "campaigns" ? (
             <CampaignFilterBar
-              campaignCount={campaigns.length}
+              search={campaignSearch}
               perPage={campaignsPerPage}
+              onSearchChange={handleCampaignSearchChange}
               onPerPageChange={handleCampaignsPerPageChange}
             />
-          </div>
-        )}
-
-        {activeView === "emails" && (
-          <div className="border-t px-6 py-3">
+          ) : (
             <EmailFilterBar
               qInput={qInput}
               filterStatus={filterStatus}
@@ -158,43 +137,52 @@ export function ReportsClient() {
               onClearAll={handleClearAllFilters}
               onPerPageChange={handleEmailsPerPageChange}
             />
-          </div>
-        )}
+          )}
+        </FilterBar>
       </div>
 
-      {/* Scrollable content */}
       <div className="space-y-4 p-6">
-        {activeView === "campaigns" && (
-          <>
-            {emailStats && <EmailStatsChips stats={emailStats} />}
+
+        <Card>
+          {/* View switcher */}
+          <CardHeader className="flex-row flex-wrap items-center gap-3 space-y-0 py-3">
+            <Tabs
+              value={activeView}
+              onValueChange={(v) => setActiveView(v as "campaigns" | "emails")}
+            >
+              <TabsList>
+                <TabsTrigger value="campaigns">Campaign Breakdown</TabsTrigger>
+                <TabsTrigger value="emails">Email Records</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </CardHeader>
+
+          {activeView === "campaigns" ? (
             <CampaignTable
-              campaigns={campaigns}
+              campaigns={filteredCampaigns}
+              hasFilters={campaignSearch !== ""}
               page={campaignsPage}
               perPage={campaignsPerPage}
               onPageChange={setCampaignsPage}
             />
-          </>
-        )}
-
-        {activeView === "emails" && (
-          <>
-            {emailStats && <EmailStatsChips stats={emailStats} />}
+          ) : (
             <EmailTable
               data={emailsData}
               isLoading={emailsLoading}
+              hasFilters={hasEmailFilters}
               page={emailPage}
               perPage={emailPerPage}
               onPageChange={setEmailPage}
               onSelectEmail={setSelectedEmail}
             />
-          </>
-        )}
-      </div>
+          )}
+        </Card>
 
-      <EmailDetailPanel
-        email={selectedEmail}
-        onClose={() => setSelectedEmail(null)}
-      />
+        <EmailDetailPanel
+          email={selectedEmail}
+          onClose={() => setSelectedEmail(null)}
+        />
+      </div>
     </div>
   );
 }

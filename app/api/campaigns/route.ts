@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
 import { prisma } from "@/lib/prisma";
-import { getSendQueue } from "@/lib/jobs/queue";
 import { getAuthenticatedUser } from "@/lib/api/session";
 import { findOwnedList } from "@/lib/api/ownership";
 import { z } from "zod";
@@ -23,10 +22,8 @@ const createSchema = z.object({
   maxInterval: z.number().int().min(1).default(8),
   dailyLimit: z.number().int().min(1).default(100),
   hourlyLimit: z.number().int().min(1).default(20),
-  scheduledAt: z.string().optional().refine(
-    (v) => !v || !isNaN(Date.parse(v)),
-    { message: "Invalid date" }
-  ),
+  sendWindowStart: z.number().int().min(0).max(23).nullable().optional(),
+  sendWindowEnd: z.number().int().min(0).max(23).nullable().optional(),
   aiProvider: z.enum(["openai", "anthropic", "google_gemini", "openrouter", "custom"]).optional(),
   aiModel: z.string().optional(),
   status: z.enum(["pending"]).default("pending"),
@@ -65,17 +62,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 });
   }
 
-  const { scheduledAt, aiProvider, intervalType, ...rest } = parsed.data;
-
-  if (scheduledAt) {
-    const d = new Date(scheduledAt);
-    if (d <= new Date()) {
-      return NextResponse.json({ error: "scheduledAt must be in the future" }, { status: 400 });
-    }
-  }
+  const { aiProvider, intervalType, ...rest } = parsed.data;
 
   // Verify list belongs to the authenticated user before counting its members.
   const list = await findOwnedList(rest.listId, user.id, {
@@ -96,29 +86,10 @@ export async function POST(req: NextRequest) {
       ...rest,
       userId: user.id,
       intervalType: intervalType as "fixed" | "random",
-      ...(scheduledAt ? { scheduledAt: new Date(scheduledAt) } : {}),
       ...(aiProvider ? { aiProvider } : {}),
       totalEmails: list._count.members,
     },
   });
-
-  if (scheduledAt) {
-    const delay = new Date(scheduledAt).getTime() - Date.now();
-    if (delay > 0) {
-      const queue = getSendQueue();
-      await queue.add(
-        "send",
-        { campaignId: campaign.id, userId: user.id },
-        {
-          delay,
-          jobId: `scheduled-send-${campaign.id}`,
-          attempts: 1,
-          removeOnComplete: { age: 3600 },
-          removeOnFail: { age: 86400 },
-        }
-      );
-    }
-  }
 
   return NextResponse.json(campaign, { status: 201 });
 }

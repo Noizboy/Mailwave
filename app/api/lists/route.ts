@@ -11,7 +11,7 @@ export async function GET() {
   const lists = await prisma.list.findMany({
     where: { userId: user.id },
     include: {
-      _count: { select: { members: true } },
+      _count: { select: { members: true, campaigns: true } },
       members: {
         include: { contact: { select: { status: true } } },
       },
@@ -29,6 +29,7 @@ export async function GET() {
     issueCount: list.members.filter((m) =>
       ["invalid", "suppressed", "unsubscribed"].includes(m.contact.status)
     ).length,
+    campaignCount: list._count.campaigns,
   }));
 
   return NextResponse.json(listsWithStats);

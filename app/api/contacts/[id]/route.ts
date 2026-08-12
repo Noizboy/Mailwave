@@ -58,10 +58,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { customFields, ...rest } = parsed.data;
+
+  let resetSentCount = false;
+  if (parsed.data.status === "subscribed" && contact.status === "suppressed") {
+    const sendingAccount = await prisma.sendingAccount.findUnique({ where: { userId: user.id } });
+    const limit = sendingAccount?.suppressAfterEmails ?? 3;
+    resetSentCount = contact.emailsSentCount >= limit;
+  }
+
   const updated = await prisma.contact.update({
     where: { id },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data: { ...rest, ...(customFields !== undefined ? { customFields: customFields as any } : {}) },
+    data: {
+      ...rest,
+      ...(customFields !== undefined ? { customFields: customFields as any } : {}),
+      ...(resetSentCount ? { emailsSentCount: 0 } : {}),
+    },
   });
   return NextResponse.json(updated);
 }

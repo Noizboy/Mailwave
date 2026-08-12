@@ -5,19 +5,23 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { ImportDestinationListDialog, type ImportDestination } from "./import-destination-list-dialog";
 import { ImportReviewBulkActions } from "./import-review-bulk-actions";
-import { ImportReviewTable } from "./import-review-table";
+import { ImportReviewTable, SummaryChip } from "./import-review-table";
 import type { ImportData, ImportFilter, ImportRow } from "./import-review-types";
+
+const filters: ImportFilter[] = ["all", "valid", "invalid", "duplicate", "missing_data"];
 
 interface FieldCfg { label: string; placeholder?: string; inputClassName?: string; type?: string; textarea?: boolean; fullWidth?: boolean; required?: boolean; hint?: string; }
 const FIELD_CONFIG: Record<string, FieldCfg> = {
@@ -44,12 +48,49 @@ export function ImportReviewClient({ importId }: { importId: string }) {
   const handleEditSave = async (formData: Record<string, string>) => { if (!editRow) return; const response = await fetch(`/api/import/${importId}/rows`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rowId: editRow.id, rowData: formData }) }); if (response.ok) { toast.success("Row updated", "Your changes have been saved to the import preview."); setEditRow(null); formReset(); invalidate(); } else toast.error("Could not update row", "The row data could not be saved. Try again."); };
   const handleSaveContacts = async (destination: ImportDestination) => { setSaving(true); const response = await fetch(`/api/import/${importId}/save`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(destination) }); const result = await response.json(); setSaving(false); if (response.ok) { toast.success(`${result.savedCount} contact${result.savedCount === 1 ? "" : "s"} imported`, "They are now available in your Contacts."); router.push("/contacts"); } else toast.error("Import failed", result.error || "Contacts could not be saved. Try again."); };
   const handleCancel = async () => { await fetch(`/api/import/${importId}/cancel`, { method: "POST" }); router.push("/upload"); };
-  return <div className="flex h-full flex-col">
-    <ImportReviewTable data={data} filter={filter} onFilterChange={setFilter} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleAll={toggleAll} onEdit={(row) => { setEditRow(row); formReset(row.rowData); }} bulkActions={<ImportReviewBulkActions selectedCount={selectedIds.size} onDeleteSelected={() => setShowDeleteConfirm(true)} onCancelImport={handleCancel} onSaveContacts={() => setShowSaveDialog(true)} />} />
-    <EditRowDialog editRow={editRow} data={data} register={register} handleSubmit={handleSubmit} isSubmitting={isSubmitting} onSave={handleEditSave} onClose={() => setEditRow(null)} />
-    <ConfirmDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm} title={`Delete ${selectedIds.size} row${selectedIds.size === 1 ? "" : "s"}?`} description="The selected rows will be removed from this import. This action cannot be undone." confirmLabel="Delete" onConfirm={handleDeleteSelected} />
-    <ImportDestinationListDialog open={showSaveDialog} onOpenChange={setShowSaveDialog} validCount={data.validCount} invalidCount={data.invalidCount} duplicateCount={data.duplicateCount} saving={saving} onSave={handleSaveContacts} />
-  </div>;
+  return (
+    <div className="space-y-4 p-6">
+      <div>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Reviewing: <span className="font-medium text-foreground">{data.filename}</span>
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <SummaryChip label="Total" value={data.rowCount} tone="neutral" />
+          <SummaryChip label="Valid" value={data.validCount} tone="success" />
+          <SummaryChip label="Duplicates" value={data.duplicateCount} tone="warning" />
+          <SummaryChip label="Invalid" value={data.invalidCount} tone="destructive" />
+          <SummaryChip label="Lists" value={0} tone="info" />
+        </div>
+      </div>
+      <Card>
+        <CardHeader className="flex-row flex-wrap items-center gap-3 space-y-0 py-3">
+          <Tabs value={filter} onValueChange={(v) => setFilter(v as ImportFilter)}>
+            <TabsList>
+              {filters.map((value) => (
+                <TabsTrigger key={value} value={value}>
+                  {value === "all" ? "All" : value === "missing_data" ? "Missing Data" : value.charAt(0).toUpperCase() + value.slice(1)}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <div className="flex-1" />
+          <ImportReviewBulkActions selectedCount={selectedIds.size} onDeleteSelected={() => setShowDeleteConfirm(true)} onCancelImport={handleCancel} onSaveContacts={() => setShowSaveDialog(true)} />
+        </CardHeader>
+        <ImportReviewTable
+          data={data}
+          filteredRows={filteredRows}
+          allSelected={allSelected}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleAll={toggleAll}
+          onEdit={(row) => { setEditRow(row); formReset(row.rowData); }}
+        />
+      </Card>
+      <EditRowDialog editRow={editRow} data={data} register={register} handleSubmit={handleSubmit} isSubmitting={isSubmitting} onSave={handleEditSave} onClose={() => setEditRow(null)} />
+      <ConfirmDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm} title={`Delete ${selectedIds.size} row${selectedIds.size === 1 ? "" : "s"}?`} description="The selected rows will be removed from this import. This action cannot be undone." confirmLabel="Delete" onConfirm={handleDeleteSelected} />
+      <ImportDestinationListDialog open={showSaveDialog} onOpenChange={setShowSaveDialog} validCount={data.validCount} invalidCount={data.invalidCount} duplicateCount={data.duplicateCount} saving={saving} onSave={handleSaveContacts} />
+    </div>
+  );
 }
 
 function EditRowDialog({ editRow, data, register, handleSubmit, isSubmitting, onSave, onClose }: { editRow: ImportRow | null; data: ImportData; register: ReturnType<typeof useForm<Record<string, string>>>["register"]; handleSubmit: ReturnType<typeof useForm<Record<string, string>>>["handleSubmit"]; isSubmitting: boolean; onSave: (data: Record<string, string>) => Promise<void>; onClose: () => void }) {

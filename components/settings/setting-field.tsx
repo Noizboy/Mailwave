@@ -2,10 +2,21 @@
 
 import { Label } from "@/components/ui/label";
 
-export function SettingField({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+export function SettingField({
+  label,
+  description,
+  children,
+}: {
+  label: React.ReactNode;
+  description?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
+      {description && (
+        <p className="text-xs text-muted-foreground">{description}</p>
+      )}
       {children}
     </div>
   );

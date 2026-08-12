@@ -44,10 +44,17 @@ interface Member {
   };
 }
 
+interface Campaign {
+  id: string;
+  name: string;
+  status: string;
+}
+
 interface ListDetail {
   id: string;
   name: string;
   members: Member[];
+  campaigns: Campaign[];
   stats: {
     total: number;
     subscribed: number;
@@ -174,6 +181,41 @@ export function ListDetailClient({ listId }: { listId: string }) {
           <StatChip key={c.label} {...c} />
         ))}
       </div>
+
+      {list.campaigns.length > 0 && (
+        <Card id="campaigns">
+          <CardHeader className="space-y-0 pb-3">
+            <CardTitle>Campaigns using this list</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Campaign</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.campaigns.map((campaign) => (
+                  <TableRow key={campaign.id}>
+                    <TableCell>
+                      <Link
+                        href={`/campaigns/${campaign.id}`}
+                        className="font-medium text-foreground transition-colors hover:text-primary"
+                      >
+                        {campaign.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={campaign.status} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">

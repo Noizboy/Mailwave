@@ -41,7 +41,7 @@ interface DashboardData {
     pendingCount: number;
     completedAt: string | null;
     createdAt: string;
-    list: { id: string; name: string };
+    list: { id: string; name: string } | null;
   }[];
 }
 
@@ -147,9 +147,13 @@ export function DashboardClient() {
                       </Link>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      <Link href={`/lists/${c.list.id}`} className="hover:text-primary">
-                        {c.list.name}
-                      </Link>
+                      {c.list ? (
+                        <Link href={`/lists/${c.list.id}`} className="hover:text-primary">
+                          {c.list.name}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={c.status} />

@@ -42,6 +42,7 @@ interface ListItem {
   totalContacts: number;
   subscribedContacts: number;
   issueCount: number;
+  campaignCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +80,8 @@ export function ListsClient() {
       setShowCreate(false);
       setNewName("");
       queryClient.invalidateQueries({ queryKey: ["lists"] });
+      queryClient.invalidateQueries({ queryKey: ["lists-for-filter"] });
+      queryClient.invalidateQueries({ queryKey: ["lists-for-add-contact"] });
     }
   };
 
@@ -94,6 +97,8 @@ export function ListsClient() {
       setRenameTarget(null);
       setNewName("");
       queryClient.invalidateQueries({ queryKey: ["lists"] });
+      queryClient.invalidateQueries({ queryKey: ["lists-for-filter"] });
+      queryClient.invalidateQueries({ queryKey: ["lists-for-add-contact"] });
     }
   };
 
@@ -103,6 +108,9 @@ export function ListsClient() {
     if (res.ok) {
       toast.success("List deleted", "The list was removed. Contacts were preserved in your account.");
       queryClient.invalidateQueries({ queryKey: ["lists"] });
+      queryClient.invalidateQueries({ queryKey: ["lists-for-filter"] });
+      queryClient.invalidateQueries({ queryKey: ["lists-for-add-contact"] });
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
       setDeleteTarget(null);
     } else {
       const data = await res.json().catch(() => ({}));
@@ -253,6 +261,14 @@ export function ListsClient() {
                     value={list.issueCount}
                     tone={list.issueCount > 0 ? "danger" : "muted"}
                   />
+                  <Link href={`/lists/${list.id}#campaigns`} className="text-center">
+                    <div className={cn("text-lg font-semibold", list.campaignCount > 0 ? "text-foreground" : "text-muted-foreground")}>
+                      {list.campaignCount}
+                    </div>
+                    <div className="text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                      Campaigns
+                    </div>
+                  </Link>
                 </div>
 
                 <Button asChild className="mt-4 w-full">

@@ -4,16 +4,29 @@ import type { CampaignForWizard, ListOption, WizardData } from "./model";
 
 export function ReviewStep({ campaign, data, lists, intervalType, minInterval, maxInterval }: { campaign?: CampaignForWizard; data: WizardData; lists: ListOption[]; intervalType: "fixed" | "random"; minInterval: number; maxInterval: number }) {
   const selectedList = lists.find((list) => list.id === data.listId);
+
+  const formatHour = (h: number) => {
+    const period = h < 12 ? "AM" : "PM";
+    const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${display}:00 ${period}`;
+  };
+
+  const windowLabel =
+    data.sendWindowStart !== null && data.sendWindowStart !== undefined &&
+    data.sendWindowEnd !== null && data.sendWindowEnd !== undefined
+      ? `${formatHour(data.sendWindowStart)} – ${formatHour(data.sendWindowEnd)}`
+      : "No restriction";
+
   const details = [
     ["Name", data.name],
     ["List", selectedList?.name ?? data.listId],
     ["Tone", data.tone ?? "professional"],
     ["Email length", data.emailLength],
     ["Interval", intervalType === "random" ? `${minInterval}–${maxInterval} min (random)` : `${minInterval} min (fixed)`],
+    ["Sending window", windowLabel],
     ...(data.goal ? [["Goal", data.goal]] : []),
     ...(data.product ? [["Product", data.product]] : []),
     ...(data.cta ? [["CTA", data.cta]] : []),
-    ...(data.scheduledAt ? [["Scheduled start", new Date(data.scheduledAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })]] : [["Start", "Immediately after approval"]]),
   ] as [string, string][];
 
   return <>

@@ -83,6 +83,49 @@ const HOUR_MS = 3600_000;
 const DAY_MS = 86_400_000;
 
 // ---------------------------------------------------------------------------
+// Timezone helpers
+// ---------------------------------------------------------------------------
+
+/** Return the current hour (0-23) expressed in the given IANA timezone. */
+function getHourInTimezone(tz: string, date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    hour12: false,
+  }).formatToParts(date);
+  return parseInt(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
+}
+
+/**
+ * Compute the UTC Date when the sending window opens next in the given timezone.
+ * Works by calculating how many ms remain until `startHour:00:00` in the timezone.
+ * DST edge cases are self-correcting: if the job fires slightly early, the window
+ * check re-evaluates and re-schedules for the remaining time.
+ */
+function nextWindowOpenDate(tz: string, startHour: number): Date {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: false,
+  }).formatToParts(now);
+  const get = (type: string) =>
+    parseInt(parts.find((p) => p.type === type)?.value ?? "0");
+  const currentHour = get("hour") % 24;
+  const currentMinute = get("minute");
+  const currentSecond = get("second");
+
+  let hoursUntil = (startHour - currentHour + 24) % 24;
+  if (hoursUntil === 0) hoursUntil = 24; // window start is in the past within this hour
+
+  const msUntil =
+    hoursUntil * HOUR_MS - currentMinute * 60_000 - currentSecond * 1_000;
+  return new Date(now.getTime() + Math.max(msUntil, 60_000));
+}
+
+// ---------------------------------------------------------------------------
 // Stage 1: Claim the send run
 // ---------------------------------------------------------------------------
 
@@ -228,6 +271,15 @@ async function failRunAndNotify(
   }
 }
 
+/** Load the user's configured IANA timezone (defaults to "UTC"). */
+export async function loadUserTimezone(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { timezone: true },
+  });
+  return user?.timezone ?? "UTC";
+}
+
 /** Load the per-contact suppression threshold for the user. */
 export async function loadSuppressAfterEmails(userId: string): Promise<number> {
   const sendingAccount = await prisma.sendingAccount.findUnique({ where: { userId } });
@@ -286,8 +338,9 @@ export async function decideContinuation(args: {
   smtpSettings: SmtpSettings;
   rateLimitCounts: RateLimitCounts;
   rateLimitWindowStart: { hourAgo: Date; dayAgo: Date };
+  userTimezone: string;
 }): Promise<ContinuationDecision> {
-  const { campaignId, sendRunId, email, suppressAfterEmails, smtpSettings, rateLimitCounts, rateLimitWindowStart } = args;
+  const { campaignId, sendRunId, email, suppressAfterEmails, smtpSettings, rateLimitCounts, rateLimitWindowStart, userTimezone } = args;
 
   // Re-check campaign status in case it was paused or a newer run took over.
   const freshCampaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
@@ -306,6 +359,26 @@ export async function decideContinuation(args: {
       newSendRunId: randomUUID(),
       rateLimitResumeAt: null,
     };
+  }
+
+  // Sending time window: only send within the configured hours in the user's timezone.
+  if (freshCampaign.sendWindowStart !== null && freshCampaign.sendWindowEnd !== null) {
+    const now = new Date();
+    const nowHour = getHourInTimezone(userTimezone, now);
+    const start = freshCampaign.sendWindowStart;
+    const end = freshCampaign.sendWindowEnd;
+    const inWindow = start < end
+      ? nowHour >= start && nowHour < end
+      : nowHour >= start || nowHour < end; // overnight window e.g. 22–6
+    if (!inWindow) {
+      const next = nextWindowOpenDate(userTimezone, start);
+      return {
+        action: "reenqueue",
+        delay: next.getTime() - now.getTime(),
+        newSendRunId: randomUUID(),
+        rateLimitResumeAt: next,
+      };
+    }
   }
 
   // Rate limit: re-enqueue with a delay computed from when the exceeded
