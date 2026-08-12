@@ -281,8 +281,8 @@ function SmtpFormFields({
         <Select value={form.encryption ?? "tls"} onValueChange={(v) => set("encryption", v)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="tls">TLS — Port 587 (recommended)</SelectItem>
-            <SelectItem value="ssl">SSL — Port 465</SelectItem>
+            <SelectItem value="tls">TLS (recommended)</SelectItem>
+            <SelectItem value="ssl">SSL</SelectItem>
             <SelectItem value="none">None (not recommended)</SelectItem>
           </SelectContent>
         </Select>
