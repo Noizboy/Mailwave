@@ -70,8 +70,13 @@ export async function POST(req: NextRequest) {
     });
 
     if (testEmail) {
-      const fromAddress = config.fromEmail ?? config.username ?? "";
-      const from = `"${config.fromName ?? ""}" <${fromAddress}>`;
+      if (!config.fromEmail) {
+        return NextResponse.json({ error: "From Email is not configured. Add it in SMTP settings before sending a test." }, { status: 422 });
+      }
+      if (!config.fromName?.trim()) {
+        return NextResponse.json({ error: "From Name is not configured. Add it in SMTP settings before sending a test." }, { status: 422 });
+      }
+      const from = `"${config.fromName}" <${config.fromEmail}>`;
 
       await transporter.sendMail({
         from,
@@ -87,7 +92,7 @@ export async function POST(req: NextRequest) {
               If you received this, your mail server is configured correctly and ready to send campaigns.
             </p>
             <hr style="border:none;border-top:1px solid #eee;margin:0 0 16px;" />
-            <p style="color:#999;font-size:12px;margin:0 0 4px;">From: ${config.fromName ?? ""} &lt;${fromAddress}&gt;</p>
+            <p style="color:#999;font-size:12px;margin:0 0 4px;">From: ${config.fromName} &lt;${config.fromEmail}&gt;</p>
             <p style="color:#999;font-size:12px;margin:0;">SMTP: ${config.host}:${config.port ?? 587}</p>
           </div>
         `,
