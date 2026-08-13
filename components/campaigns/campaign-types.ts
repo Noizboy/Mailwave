@@ -37,6 +37,8 @@ export interface CampaignDetail {
   failedCount: number;
   pendingCount: number;
   approvalPendingCount: number;
+  approvedCount: number;
+  rejectedCount: number;
   skippedCount: number;
   list: { id: string; name: string } | null;
   tone: string | null;

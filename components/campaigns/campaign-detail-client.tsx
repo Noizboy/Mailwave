@@ -27,7 +27,6 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { cn } from "@/lib/utils";
 import {
   CampaignDetail,
-  EmailRow,
   getNextEmailLabel,
 } from "./campaign-types";
 import { CampaignDetailsPanel } from "./campaign-config-panels";
@@ -43,14 +42,6 @@ import { toast } from "@/hooks/use-toast";
 
 async function fetchCampaign(id: string): Promise<CampaignDetail> {
   const res = await fetch(`/api/campaigns/${id}`);
-  if (!res.ok) throw new Error("Failed");
-  return res.json();
-}
-
-async function fetchEmails(
-  campaignId: string
-): Promise<{ emails: EmailRow[]; total: number }> {
-  const res = await fetch(`/api/campaigns/${campaignId}/emails?perPage=200`);
   if (!res.ok) throw new Error("Failed");
   return res.json();
 }
@@ -151,16 +142,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     },
   });
 
-  const { data: emailsData, isLoading: emailsLoading } = useQuery({
-    queryKey: ["campaign-emails", campaignId],
-    queryFn: () => fetchEmails(campaignId),
-    enabled: !!campaign,
-    refetchInterval:
-      campaign?.status === "generating" || campaign?.status === "sending"
-        ? 3000
-        : false,
-  });
-
   const prevStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const prev = prevStatusRef.current;
@@ -170,6 +151,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
       (prev === "sending" && curr !== "sending")
     ) {
       queryClient.invalidateQueries({ queryKey: ["campaign-emails", campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
     }
     prevStatusRef.current = curr;
   }, [campaign?.status, campaignId, queryClient]);
@@ -179,8 +161,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [campaign?.status]);
-
-  const emails = emailsData?.emails ?? [];
 
   // ---- Loading / error states ----
 
@@ -228,16 +208,9 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
 
   // ---- Derived state ----
 
-  const reviewPendingCount = emails.filter(
-    (e) => e.approvalStatus === "pending"
-  ).length;
-  const rejectedCount = emails.filter(
-    (e) => e.approvalStatus === "rejected"
-  ).length;
-  const approvedCount = emails.filter(
-    (e) => e.approvalStatus === "approved"
-  ).length;
-
+  const reviewPendingCount = campaign.approvalPendingCount;
+  const rejectedCount = campaign.rejectedCount;
+  const approvedCount = campaign.approvedCount;
 
   const canGenerate = ["pending", "failed"].includes(campaign.status) && !!campaign.list;
   const canResumeReview = campaign.status === "failed" && campaign.pendingCount > 0;
@@ -251,7 +224,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const canRegenerate =
     ["pending_review", "ready_to_send"].includes(campaign.status);
   const allReviewed =
-    emails.length > 0 &&
+    campaign.emails.length > 0 &&
     campaign.status === "pending_review" &&
     reviewPendingCount === 0 &&
     rejectedCount === 0 &&
@@ -598,9 +571,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
           <EmailReview
             campaign={campaign}
             campaignId={campaignId}
-            emails={emails}
-            emailsLoading={emailsLoading}
-            onInvalidate={() => {}}
           />
 
         </div>

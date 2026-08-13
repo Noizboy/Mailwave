@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import {
   ChevronLeft,
+  ChevronRight,
   CheckCircle,
   MinusCircle,
   Edit3,
@@ -34,31 +36,71 @@ import {
 import { useEmailActions } from "./use-email-actions";
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const PER_PAGE = 50;
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function filterToQueryString(filter: string): string {
+  switch (filter) {
+    case "sent": return "status=sent";
+    case "pending": return "status=generated&approvalStatus=pending";
+    case "approved": return "approvalStatus=approved";
+    case "rejected": return "approvalStatus=rejected";
+    case "skipped": return "approvalStatus=skipped";
+    case "failed_gen": return "status=failed";
+    default: return "";
+  }
+}
+
+async function fetchEmailPage(
+  campaignId: string,
+  page: number,
+  filter: string
+): Promise<{ emails: EmailRow[]; total: number }> {
+  const filterQ = filterToQueryString(filter);
+  const url = `/api/campaigns/${campaignId}/emails?page=${page}&perPage=${PER_PAGE}${filterQ ? `&${filterQ}` : ""}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to load emails");
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
 // EmailReview
 // ---------------------------------------------------------------------------
 
 export interface EmailReviewProps {
   campaign: CampaignDetail;
   campaignId: string;
-  emails: EmailRow[];
-  emailsLoading: boolean;
-  onInvalidate: () => void;
 }
 
-export function EmailReview({
-  campaign,
-  campaignId,
-  emails,
-  emailsLoading,
-  onInvalidate,
-}: EmailReviewProps) {
+export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
   const [sidebarFilter, setSidebarFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const isGenerating = campaign.status === "generating";
+  const isSending = ["sending", "paused"].includes(campaign.status);
+
+  const { data: emailsData, isLoading: emailsLoading } = useQuery({
+    queryKey: ["campaign-emails", campaignId, page, sidebarFilter],
+    queryFn: () => fetchEmailPage(campaignId, page, sidebarFilter),
+    enabled: campaign.emails.length > 0 || isGenerating,
+    refetchInterval: isGenerating || campaign.status === "sending" ? 3000 : false,
+  });
+
+  const emails = emailsData?.emails ?? [];
+  const totalFiltered = emailsData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / PER_PAGE));
 
   const {
     regenerating,
@@ -71,61 +113,34 @@ export function EmailReview({
     saveEdit: saveEditAction,
   } = useEmailActions(campaignId);
 
-  // Derived
-  const failedGenerationEmails = emails.filter((e) => e.status === "failed");
-  const filteredEmails =
-    sidebarFilter === "all"
-      ? emails
-      : sidebarFilter === "failed_gen"
-      ? failedGenerationEmails
-      : sidebarFilter === "sent"
-      ? emails.filter((e) => e.status === "sent")
-      : sidebarFilter === "pending"
-      ? emails.filter((e) => e.approvalStatus === "pending" && e.status !== "failed")
-      : emails.filter((e) => e.approvalStatus === sidebarFilter);
-
-  const selected =
-    emails.find((e) => e.id === selectedId) ?? filteredEmails[0] ?? null;
-
-  const approvedCount = emails.filter(
-    (e) => e.approvalStatus === "approved"
-  ).length;
-  const reviewPendingCount = emails.filter(
-    (e) => e.approvalStatus === "pending" && e.status !== "failed"
-  ).length;
-  const rejectedCount = emails.filter(
-    (e) => e.approvalStatus === "rejected"
-  ).length;
-  const skippedCount = emails.filter(
-    (e) => e.approvalStatus === "skipped"
-  ).length;
-  const sentEmailsCount = emails.filter((e) => e.status === "sent").length;
-
-  const isGenerating = campaign.status === "generating";
-  const isSending = ["sending", "paused"].includes(campaign.status);
-  const canBulkSelect =
-    !isSending && campaign.status !== "completed" && emails.length > 0;
-  const allFilteredSelected =
-    filteredEmails.length > 0 &&
-    filteredEmails.every((e) => selectedIds.has(e.id));
-  const someFilteredSelected = filteredEmails.some((e) =>
-    selectedIds.has(e.id)
-  );
-
+  // Tab counts come from campaign-level metrics (accurate across all pages)
   const FILTER_TABS = [
-    { key: "all", label: `All (${emails.length})` },
-    { key: "sent", label: `Sent (${sentEmailsCount})` },
-    { key: "pending", label: `Pending (${reviewPendingCount})` },
-    { key: "approved", label: `Approved (${approvedCount})` },
-    { key: "rejected", label: `Rejected (${rejectedCount})` },
-    { key: "skipped", label: `Skipped (${skippedCount})` },
-    {
-      key: "failed_gen",
-      label: `Failed (${failedGenerationEmails.length})`,
-    },
+    { key: "all", label: `All (${campaign.emails.length})` },
+    { key: "sent", label: `Sent (${campaign.sentCount})` },
+    { key: "pending", label: `Pending (${campaign.approvalPendingCount})` },
+    { key: "approved", label: `Approved (${campaign.approvedCount})` },
+    { key: "rejected", label: `Rejected (${campaign.rejectedCount})` },
+    { key: "skipped", label: `Skipped (${campaign.skippedCount})` },
+    { key: "failed_gen", label: `Failed (${campaign.failedCount})` },
   ];
 
+  const selected =
+    emails.find((e) => e.id === selectedId) ?? emails[0] ?? null;
+
+  const canBulkSelect =
+    !isSending && campaign.status !== "completed" && emails.length > 0;
+  const allPageSelected =
+    emails.length > 0 && emails.every((e) => selectedIds.has(e.id));
+  const somePageSelected = emails.some((e) => selectedIds.has(e.id));
+
   // ---- Handlers ----
+
+  const handleFilterChange = (newFilter: string) => {
+    setSidebarFilter(newFilter);
+    setPage(1);
+    setSelectedId(null);
+    setSelectedIds(new Set());
+  };
 
   const toggleEmailSelection = (emailId: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -139,9 +154,8 @@ export function EmailReview({
   const handleApproval = async (emailId: string, approvalStatus: string) => {
     const ok = await setApproval(emailId, approvalStatus);
     if (ok) {
-      onInvalidate();
-      const currentIdx = filteredEmails.findIndex((e) => e.id === emailId);
-      const next = filteredEmails[currentIdx + 1];
+      const currentIdx = emails.findIndex((e) => e.id === emailId);
+      const next = emails[currentIdx + 1];
       if (next) setSelectedId(next.id);
     }
   };
@@ -153,20 +167,17 @@ export function EmailReview({
     const ok = await bulkSetApproval(emailIds, approvalStatus);
     if (ok) {
       setSelectedIds(new Set());
-      onInvalidate();
     }
   };
 
   const handleRegenerate = async () => {
     if (!selected) return;
     await regenerateBody(selected.id);
-    onInvalidate();
   };
 
   const handleRegenerateSubject = async () => {
     if (!selected) return;
     await regenerateSubjectAction(selected.id);
-    onInvalidate();
   };
 
   const openEdit = () => {
@@ -187,7 +198,6 @@ export function EmailReview({
     const ok = await saveEditAction(selected.id, editSubject, editBody, andApprove);
     if (ok) {
       setEditMode(false);
-      onInvalidate();
     }
   };
 
@@ -199,9 +209,9 @@ export function EmailReview({
         <span className="text-base font-semibold text-foreground">
           Generated Emails
         </span>
-        {emails.length > 0 && (
+        {campaign.emails.length > 0 && (
           <span className="text-sm text-muted-foreground">
-            {approvedCount}/{emails.length} approved
+            {campaign.approvedCount}/{campaign.emails.length} approved
           </span>
         )}
       </div>
@@ -216,10 +226,7 @@ export function EmailReview({
           <div className="overflow-x-auto border-b">
             <Tabs
               value={sidebarFilter}
-              onValueChange={(v) => {
-                setSidebarFilter(v);
-                setSelectedIds(new Set());
-              }}
+              onValueChange={handleFilterChange}
               className="px-2 pt-2"
             >
               <TabsList>
@@ -268,27 +275,27 @@ export function EmailReview({
           )}
 
           {/* Select all row */}
-          {canBulkSelect && filteredEmails.length > 0 && (
+          {canBulkSelect && emails.length > 0 && (
             <div className="flex items-center gap-2.5 border-b px-4 py-2">
               <Checkbox
                 checked={
-                  allFilteredSelected
+                  allPageSelected
                     ? true
-                    : someFilteredSelected
+                    : somePageSelected
                     ? "indeterminate"
                     : false
                 }
                 onCheckedChange={(checked) => {
                   if (checked === true) {
-                    setSelectedIds(new Set(filteredEmails.map((e) => e.id)));
+                    setSelectedIds(new Set(emails.map((e) => e.id)));
                   } else {
                     setSelectedIds(new Set());
                   }
                 }}
-                aria-label="Select all emails"
+                aria-label="Select all on this page"
               />
               <span className="text-xs text-muted-foreground select-none">
-                Select all
+                Select page
               </span>
             </div>
           )}
@@ -300,7 +307,7 @@ export function EmailReview({
                   <Skeleton key={i} className="h-14 w-full" />
                 ))}
               </div>
-            ) : filteredEmails.length === 0 ? (
+            ) : emails.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 {isGenerating
                   ? "Emails will appear here as they are generated."
@@ -309,9 +316,9 @@ export function EmailReview({
                   : "No emails match this filter."}
               </div>
             ) : (
-              filteredEmails.map((email) => {
+              emails.map((email) => {
                 const isSelected =
-                  (selectedId ?? filteredEmails[0]?.id) === email.id;
+                  (selectedId ?? emails[0]?.id) === email.id;
                 const name = getContactName(email.contact);
                 const initials = getContactInitials(email.contact);
                 const avatarColor = getAvatarColor(name);
@@ -424,6 +431,35 @@ export function EmailReview({
               })
             )}
           </div>
+
+          {/* Pagination controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-2 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || emailsLoading}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {page} / {totalPages}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || emailsLoading}
+                aria-label="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </aside>
 
         {/* Detail panel */}
@@ -442,7 +478,7 @@ export function EmailReview({
           </button>
           {!selected ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              {emails.length === 0
+              {campaign.emails.length === 0
                 ? campaign.status === "pending"
                   ? "Generate emails to start reviewing."
                   : "No emails yet."

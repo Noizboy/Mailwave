@@ -40,6 +40,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     skippedCount: metrics.skippedCount,
     pendingCount: metrics.pendingCount,
     approvalPendingCount: metrics.approvalPendingCount,
+    approvedCount: metrics.approvedCount,
+    rejectedCount: metrics.rejectedCount,
   });
 }
 
