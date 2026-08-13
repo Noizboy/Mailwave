@@ -4,9 +4,6 @@ export interface CampaignForWizard {
   id: string;
   name: string;
   listId: string;
-  goal?: string | null;
-  product?: string | null;
-  cta?: string | null;
   tone?: string | null;
   language?: string | null;
   emailLength?: string | null;
@@ -23,9 +20,6 @@ export interface CampaignForWizard {
 export const wizardSchema = z.object({
   name: z.string().min(1, "Campaign name is required"),
   listId: z.string().min(1, "Please select a list"),
-  goal: z.string().optional(),
-  product: z.string().optional(),
-  cta: z.string().optional(),
   tone: z.string().optional(),
   language: z.string(),
   emailLength: z.string(),
@@ -50,14 +44,14 @@ export interface ListOption {
 
 export const STEPS = [
   { id: 1, label: "Details" },
-  { id: 2, label: "Instructions" },
+  { id: 2, label: "Campaign Details" },
   { id: 3, label: "Sending" },
   { id: 4, label: "Review" },
 ];
 
 export const stepFields: Record<number, Array<keyof WizardData>> = {
   1: ["name", "listId"],
-  2: ["goal", "product", "cta", "tone", "language", "emailLength", "systemPrompt"],
+  2: ["tone", "language", "emailLength", "systemPrompt"],
   3: ["intervalType", "minInterval", "maxInterval", "sendWindowStart", "sendWindowEnd"],
 };
 

@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronRight,
   Pencil,
-  FileText,
   Sparkles,
   SlidersHorizontal,
 } from "lucide-react";
@@ -93,9 +92,10 @@ export function CampaignDetailsPanel({
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [name, setName] = useState("");
-  const [goal, setGoal] = useState("");
-  const [product, setProduct] = useState("");
-  const [cta, setCta] = useState("");
+  const [tone, setTone] = useState("");
+  const [language, setLanguage] = useState("");
+  const [emailLength, setEmailLength] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
 
   const { savingDetails: saving, saveCampaignDetails } =
     useCampaignConfigActions(campaignId);
@@ -103,18 +103,20 @@ export function CampaignDetailsPanel({
   const openEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     setName(campaign.name);
-    setGoal(campaign.goal ?? "");
-    setProduct(campaign.product ?? "");
-    setCta(campaign.cta ?? "");
+    setTone(campaign.tone ?? "");
+    setLanguage(campaign.language ?? "");
+    setEmailLength(campaign.emailLength ?? "");
+    setSystemPrompt(campaign.systemPrompt ?? "");
     setEditOpen(true);
   };
 
   const save = async () => {
     const ok = await saveCampaignDetails({
       name: name || undefined,
-      goal: goal || undefined,
-      product: product || undefined,
-      cta: cta || undefined,
+      tone: tone || undefined,
+      language: language || undefined,
+      emailLength: emailLength || undefined,
+      systemPrompt: systemPrompt || undefined,
     });
     if (ok) {
       setEditOpen(false);
@@ -134,7 +136,7 @@ export function CampaignDetailsPanel({
           aria-label="Campaign Details"
         >
           <div className="flex items-center gap-2.5">
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold text-foreground">
               Campaign Details
             </span>
@@ -160,6 +162,7 @@ export function CampaignDetailsPanel({
         </div>
         {open && (
           <div className="border-t px-5 py-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 md:grid-cols-3">
+            <InfoField label="NAME">{campaign.name}</InfoField>
             <InfoField label="LIST">
               {campaign.list ? (
                 <Link
@@ -172,168 +175,17 @@ export function CampaignDetailsPanel({
                 "—"
               )}
             </InfoField>
-            <InfoField label="GOAL">{campaign.goal || "—"}</InfoField>
-            <InfoField label="PRODUCT">{campaign.product || "—"}</InfoField>
-            <InfoField label="CTA">{campaign.cta || "—"}</InfoField>
             <InfoField label="CREATED">
               {new Date(campaign.createdAt).toLocaleDateString()}
             </InfoField>
-          </div>
-        )}
-      </div>
-
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
-        >
-          <SheetHeader className="border-b p-6">
-            <SheetTitle>Edit Campaign Details</SheetTitle>
-            <SheetDescription>
-              Update the campaign name, goal, product, and CTA.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex-1 space-y-5 overflow-y-auto p-6">
-            <div className="space-y-1.5">
-              <Label>Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Goal</Label>
-              <Textarea
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                placeholder="e.g. Book a demo call"
-                rows={3}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Product</Label>
-              <Input
-                value={product}
-                onChange={(e) => setProduct(e.target.value)}
-                placeholder="e.g. Mailwave — cold email platform"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>CTA</Label>
-              <Input
-                value={cta}
-                onChange={(e) => setCta(e.target.value)}
-                placeholder="e.g. Reply to this email to schedule a call"
-              />
-            </div>
-          </div>
-          <div className="border-t p-6">
-            <Button onClick={save} disabled={saving} className="w-full">
-              {saving ? "Saving..." : "Save Details"}
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// AiInstructionsPanel
-// ---------------------------------------------------------------------------
-
-interface AiInstructionsPanelProps {
-  campaign: CampaignDetail;
-  campaignId: string;
-  onSaved: () => void;
-}
-
-export function AiInstructionsPanel({
-  campaign,
-  campaignId,
-  onSaved,
-}: AiInstructionsPanelProps) {
-  const [open, setOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [tone, setTone] = useState("");
-  const [language, setLanguage] = useState("");
-  const [emailLength, setEmailLength] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState("");
-
-  const { savingAi: saving, saveAiInstructions } =
-    useCampaignConfigActions(campaignId);
-
-  const openEdit = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setTone(campaign.tone ?? "");
-    setLanguage(campaign.language ?? "");
-    setEmailLength(campaign.emailLength ?? "");
-    setSystemPrompt(campaign.systemPrompt ?? "");
-    setEditOpen(true);
-  };
-
-  const save = async () => {
-    const ok = await saveAiInstructions({
-      tone: tone || undefined,
-      language: language || undefined,
-      emailLength: emailLength || undefined,
-      systemPrompt: systemPrompt || undefined,
-    });
-    if (ok) {
-      setEditOpen(false);
-      onSaved();
-    }
-  };
-
-  return (
-    <>
-      <div className="rounded-xl border bg-card">
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setOpen((v) => !v)}
-          onKeyDown={(e) => e.key === "Enter" && setOpen((v) => !v)}
-          className="flex w-full cursor-pointer items-center justify-between px-5 py-4 select-none"
-          aria-label="AI Instructions"
-        >
-          <div className="flex items-center gap-2.5">
-            <Sparkles className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold text-foreground">
-              AI Instructions
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {campaign.status !== "completed" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={openEdit}
-                className="h-7 text-xs text-muted-foreground hover:text-foreground"
-              >
-                <Pencil className="h-3 w-3" />
-                Edit
-              </Button>
-            )}
-            {open ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )}
-          </div>
-        </div>
-        {open && (
-          <div className="border-t px-5 py-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 md:grid-cols-3">
             <InfoField label="TONE">
-              {TONE_LABELS[campaign.tone ?? ""] ??
-                campaign.tone ??
-                "Professional"}
+              {TONE_LABELS[campaign.tone ?? ""] ?? campaign.tone ?? "Professional"}
             </InfoField>
             <InfoField label="LANGUAGE">
-              {LANGUAGE_LABELS[campaign.language ?? ""] ??
-                campaign.language ??
-                "English"}
+              {LANGUAGE_LABELS[campaign.language ?? ""] ?? campaign.language ?? "English"}
             </InfoField>
             <InfoField label="EMAIL LENGTH">
-              {EMAIL_LENGTH_LABELS[campaign.emailLength ?? ""] ??
-                campaign.emailLength ??
-                "Medium (100–200 words)"}
+              {EMAIL_LENGTH_LABELS[campaign.emailLength ?? ""] ?? campaign.emailLength ?? "Medium (100–200 words)"}
             </InfoField>
             {campaign.aiProvider && (
               <InfoField label="AI PROVIDER">{campaign.aiProvider}</InfoField>
@@ -345,9 +197,7 @@ export function AiInstructionsPanel({
               <div className="col-span-1 sm:col-span-2 md:col-span-3">
                 <InfoField label="SYSTEM PROMPT">
                   <div className="max-h-36 overflow-y-auto rounded-md border bg-muted/40 p-2 text-xs leading-relaxed text-foreground/80">
-                    <p className="whitespace-pre-wrap">
-                      {campaign.systemPrompt}
-                    </p>
+                    <p className="whitespace-pre-wrap">{campaign.systemPrompt}</p>
                   </div>
                 </InfoField>
               </div>
@@ -362,12 +212,17 @@ export function AiInstructionsPanel({
           className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
         >
           <SheetHeader className="border-b p-6">
-            <SheetTitle>Edit AI Instructions</SheetTitle>
+            <SheetTitle>Edit Campaign Details</SheetTitle>
             <SheetDescription>
-              Adjust how AI generates emails for this campaign.
+              Update the campaign name and AI generation settings.
             </SheetDescription>
           </SheetHeader>
           <div className="flex-1 space-y-5 overflow-y-auto p-6">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <Separator />
             <div className="space-y-1.5">
               <Label>Tone</Label>
               <Select value={tone} onValueChange={setTone}>
@@ -435,7 +290,7 @@ export function AiInstructionsPanel({
           </div>
           <div className="border-t p-6">
             <Button onClick={save} disabled={saving} className="w-full">
-              {saving ? "Saving..." : "Save Instructions"}
+              {saving ? "Saving..." : "Save Details"}
             </Button>
           </div>
         </SheetContent>
@@ -707,7 +562,7 @@ export function SendingConfigPanel({
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-52 overflow-y-auto">
                         {HOUR_OPTIONS.map((opt) => (
                           <SelectItem key={opt.value} value={String(opt.value)}>
                             {opt.label}
@@ -725,7 +580,7 @@ export function SendingConfigPanel({
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-52 overflow-y-auto">
                         {HOUR_OPTIONS.map((opt) => (
                           <SelectItem key={opt.value} value={String(opt.value)}>
                             {opt.label}

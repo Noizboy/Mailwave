@@ -31,7 +31,6 @@ import {
   getNextEmailLabel,
 } from "./campaign-types";
 import { CampaignDetailsPanel } from "./campaign-config-panels";
-import { AiInstructionsPanel } from "./campaign-config-panels";
 import { SendingConfigPanel } from "./campaign-config-panels";
 import { EmailReview } from "./email-review";
 import { useCampaignActions } from "./use-campaign-actions";
@@ -211,9 +210,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
           id: campaign.id,
           name: campaign.name,
           listId: campaign.list?.id ?? "",
-          goal: campaign.goal,
-          product: campaign.product,
-          cta: campaign.cta,
           tone: campaign.tone,
           language: campaign.language,
           emailLength: campaign.emailLength,
@@ -588,11 +584,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
 
           {/* Configuration panels */}
           <CampaignDetailsPanel
-            campaign={campaign}
-            campaignId={campaignId}
-            onSaved={() => {}}
-          />
-          <AiInstructionsPanel
             campaign={campaign}
             campaignId={campaignId}
             onSaved={() => {}}

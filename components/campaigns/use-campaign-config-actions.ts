@@ -30,12 +30,6 @@ function invalidateCampaign(
 
 export interface CampaignDetailsPayload {
   name?: string;
-  goal?: string;
-  product?: string;
-  cta?: string;
-}
-
-export interface AiInstructionsPayload {
   tone?: string;
   language?: string;
   emailLength?: string;
@@ -57,16 +51,11 @@ export interface SendingConfigPayload {
 export interface UseCampaignConfigActionsResult {
   /** Whether the campaign details PATCH is in flight. */
   savingDetails: boolean;
-  /** Whether the AI instructions PATCH is in flight. */
-  savingAi: boolean;
   /** Whether the sending config PATCH is in flight. */
   savingSending: boolean;
 
   /** PATCH /api/campaigns/:id  with campaign details fields */
   saveCampaignDetails: (payload: CampaignDetailsPayload) => Promise<boolean>;
-
-  /** PATCH /api/campaigns/:id  with AI instruction fields */
-  saveAiInstructions: (payload: AiInstructionsPayload) => Promise<boolean>;
 
   /** PATCH /api/campaigns/:id  with sending config fields */
   saveSendingConfig: (payload: SendingConfigPayload) => Promise<boolean>;
@@ -77,7 +66,6 @@ export function useCampaignConfigActions(
 ): UseCampaignConfigActionsResult {
   const qc = useQueryClient();
   const [savingDetails, setSavingDetails] = useState(false);
-  const [savingAi, setSavingAi] = useState(false);
   const [savingSending, setSavingSending] = useState(false);
 
   const invalidate = () => invalidateCampaign(qc, campaignId);
@@ -100,30 +88,6 @@ export function useCampaignConfigActions(
       return true;
     }
     setSavingDetails(false);
-    return false;
-  };
-
-  // ---- AI instructions ------------------------------------------------------
-
-  const saveAiInstructions = async (
-    payload: AiInstructionsPayload
-  ): Promise<boolean> => {
-    setSavingAi(true);
-    const res = await fetch(`/api/campaigns/${campaignId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      toast.success(
-        "AI instructions saved",
-        "Campaign instructions have been updated."
-      );
-      invalidate();
-      setSavingAi(false);
-      return true;
-    }
-    setSavingAi(false);
     return false;
   };
 
@@ -153,10 +117,8 @@ export function useCampaignConfigActions(
 
   return {
     savingDetails,
-    savingAi,
     savingSending,
     saveCampaignDetails,
-    saveAiInstructions,
     saveSendingConfig,
   };
 }

@@ -39,9 +39,6 @@ export interface CampaignDetail {
   approvalPendingCount: number;
   skippedCount: number;
   list: { id: string; name: string } | null;
-  goal: string | null;
-  product: string | null;
-  cta: string | null;
   tone: string | null;
   language: string | null;
   emailLength: string | null;

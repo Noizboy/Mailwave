@@ -94,9 +94,9 @@ export function CreateCampaignWizard({ campaign }: { campaign?: CampaignForWizar
 }
 
 function campaignValues(campaign: CampaignForWizard): WizardData {
-  return { name: campaign.name, listId: campaign.listId, goal: campaign.goal ?? "", product: campaign.product ?? "", cta: campaign.cta ?? "", tone: campaign.tone ?? "professional", language: campaign.language ?? "en", emailLength: campaign.emailLength ?? "medium", systemPrompt: campaign.systemPrompt ?? "", intervalType: (campaign.intervalType as "fixed" | "random") ?? "random", minInterval: campaign.minInterval ?? 3, maxInterval: campaign.maxInterval ?? 8, sendWindowStart: campaign.sendWindowStart ?? null, sendWindowEnd: campaign.sendWindowEnd ?? null, aiProvider: (campaign.aiProvider as WizardData["aiProvider"]) ?? "", aiModel: campaign.aiModel ?? "" };
+  return { name: campaign.name, listId: campaign.listId, tone: campaign.tone ?? "professional", language: campaign.language ?? "en", emailLength: campaign.emailLength ?? "medium", systemPrompt: campaign.systemPrompt ?? "", intervalType: (campaign.intervalType as "fixed" | "random") ?? "random", minInterval: campaign.minInterval ?? 3, maxInterval: campaign.maxInterval ?? 8, sendWindowStart: campaign.sendWindowStart ?? null, sendWindowEnd: campaign.sendWindowEnd ?? null, aiProvider: (campaign.aiProvider as WizardData["aiProvider"]) ?? "", aiModel: campaign.aiModel ?? "" };
 }
 
 function newCampaignValues(listId: string): WizardData {
-  return { name: "", listId, goal: "", product: "", cta: "", tone: "professional", language: "en", emailLength: "medium", systemPrompt: "", intervalType: "random", minInterval: 3, maxInterval: 8, sendWindowStart: null, sendWindowEnd: null, aiProvider: "", aiModel: "" };
+  return { name: "", listId, tone: "professional", language: "en", emailLength: "medium", systemPrompt: "", intervalType: "random", minInterval: 3, maxInterval: 8, sendWindowStart: null, sendWindowEnd: null, aiProvider: "", aiModel: "" };
 }

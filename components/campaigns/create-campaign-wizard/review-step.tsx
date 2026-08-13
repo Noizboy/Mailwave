@@ -24,9 +24,6 @@ export function ReviewStep({ campaign, data, lists, intervalType, minInterval, m
     ["Email length", data.emailLength],
     ["Interval", intervalType === "random" ? `${minInterval}–${maxInterval} min (random)` : `${minInterval} min (fixed)`],
     ["Sending window", windowLabel],
-    ...(data.goal ? [["Goal", data.goal]] : []),
-    ...(data.product ? [["Product", data.product]] : []),
-    ...(data.cta ? [["CTA", data.cta]] : []),
   ] as [string, string][];
 
   return <>
