@@ -83,7 +83,6 @@ export function DashboardClient() {
       value: stats.failedEmails,
       href: "/reports",
       icon: AlertTriangle,
-      delta: stats.failedEmails > 0 ? `${stats.failedEmails} need attention` : undefined,
       deltaTone: stats.failedEmails > 0 ? ("negative" as const) : ("neutral" as const),
     },
     { label: "Pending Reviews", value: stats.pendingReviews, href: "/campaigns", icon: ClockAlert },
