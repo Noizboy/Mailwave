@@ -17,13 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -436,17 +429,18 @@ export function SendingConfigPanel({
         )}
       </div>
 
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent
+          className="flex flex-col gap-0 p-0 sm:max-w-md max-h-[90vh]"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
         >
-          <SheetHeader className="border-b p-6">
-            <SheetTitle>Edit Sending Configuration</SheetTitle>
-            <SheetDescription>
+          <DialogHeader className="border-b p-6">
+            <DialogTitle>Edit Sending Configuration</DialogTitle>
+            <DialogDescription>
               Control how quickly emails are delivered.
-            </SheetDescription>
-          </SheetHeader>
+            </DialogDescription>
+          </DialogHeader>
           <div className="flex-1 space-y-5 overflow-y-auto p-6">
             <div className="space-y-1.5">
               <Label>Interval Type</Label>
@@ -570,7 +564,7 @@ export function SendingConfigPanel({
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="max-h-52 overflow-y-auto">
+                      <SelectContent className="max-h-52 overflow-y-scroll">
                         {HOUR_OPTIONS.map((opt) => (
                           <SelectItem key={opt.value} value={String(opt.value)}>
                             {opt.label}
@@ -588,7 +582,7 @@ export function SendingConfigPanel({
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="max-h-52 overflow-y-auto">
+                      <SelectContent className="max-h-52 overflow-y-scroll">
                         {HOUR_OPTIONS.map((opt) => (
                           <SelectItem key={opt.value} value={String(opt.value)}>
                             {opt.label}
@@ -606,8 +600,8 @@ export function SendingConfigPanel({
               {saving ? "Saving..." : "Save Configuration"}
             </Button>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
