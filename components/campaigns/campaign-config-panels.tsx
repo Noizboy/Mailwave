@@ -11,6 +11,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -206,17 +213,18 @@ export function CampaignDetailsPanel({
         )}
       </div>
 
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent
+          className="flex flex-col gap-0 p-0 sm:max-w-md max-h-[90vh]"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
         >
-          <SheetHeader className="border-b p-6">
-            <SheetTitle>Edit Campaign Details</SheetTitle>
-            <SheetDescription>
+          <DialogHeader className="border-b p-6">
+            <DialogTitle>Edit Campaign Details</DialogTitle>
+            <DialogDescription>
               Update the campaign name and AI generation settings.
-            </SheetDescription>
-          </SheetHeader>
+            </DialogDescription>
+          </DialogHeader>
           <div className="flex-1 space-y-5 overflow-y-auto p-6">
             <div className="space-y-1.5">
               <Label>Name</Label>
@@ -293,8 +301,8 @@ export function CampaignDetailsPanel({
               {saving ? "Saving..." : "Save Details"}
             </Button>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
