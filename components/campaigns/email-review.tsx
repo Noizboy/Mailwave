@@ -557,7 +557,7 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
               )}
 
               {/* Preview / edit */}
-              {editMode && !isSending ? (
+              {editMode && campaign.status !== "sending" ? (
                 <div className="rounded-xl border bg-card space-y-4 p-4">
                   <div className="space-y-1.5">
                     <Label>Subject</Label>
@@ -636,7 +636,7 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
               {/* Per-email actions */}
               {!editMode &&
                 selected.contact.status !== "suppressed" &&
-                !isSending &&
+                campaign.status !== "sending" &&
                 campaign.status !== "completed" && (
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" size="sm" onClick={openEdit}>

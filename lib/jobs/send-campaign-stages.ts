@@ -301,7 +301,7 @@ export async function loadPendingEmails(campaignId: string): Promise<PendingEmai
     where: {
       campaignId,
       approvalStatus: "approved",
-      status: { in: ["generated", "approved"] },
+      status: "approved",
       contact: { status: "subscribed" },
     },
     include: {
@@ -693,7 +693,7 @@ export async function finalizeSendRun(args: {
     where: {
       campaignId,
       approvalStatus: "approved",
-      status: { in: ["generated", "approved"] },
+      status: "approved",
     },
   });
   const emailMetrics = deriveCampaignMetrics(

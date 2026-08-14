@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   ChevronDown,
@@ -317,6 +318,13 @@ export function SendingConfigPanel({
 }: SendingConfigPanelProps) {
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+
+  const { data: accountData } = useQuery<{ timezone: string | null }>({
+    queryKey: ["settings-account"],
+    queryFn: () => fetch("/api/settings/account").then((r) => r.json()),
+    staleTime: Infinity,
+  });
+  const userTimezone = accountData?.timezone ?? null;
   const [intervalType, setIntervalType] = useState<"fixed" | "random">(
     "random"
   );
@@ -424,6 +432,19 @@ export function SendingConfigPanel({
                   ? `${formatHour(campaign.sendWindowStart)} – ${formatHour(campaign.sendWindowEnd)}`
                   : "No restriction"}
               </InfoField>
+              {campaign.sendWindowStart !== null &&
+                campaign.sendWindowStart !== undefined && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {userTimezone ? (
+                      <>Times enforced in <span className="font-medium text-foreground">{userTimezone}</span> · <Link href="/settings" className="underline underline-offset-2">Change in Settings</Link></>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        No timezone set — defaulting to UTC ·{" "}
+                        <Link href="/settings" className="underline underline-offset-2">Set your timezone</Link>
+                      </span>
+                    )}
+                  </p>
+                )}
             </div>
           </div>
         )}
@@ -539,7 +560,7 @@ export function SendingConfigPanel({
                 <div>
                   <Label>Sending time window</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Restrict sending to specific UTC hours each day.
+                    Restrict sending to specific hours each day.
                   </p>
                 </div>
                 <Switch
@@ -554,44 +575,56 @@ export function SendingConfigPanel({
                 />
               </div>
               {windowEnabled && (
-                <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">From</Label>
-                    <Select
-                      value={String(windowStart)}
-                      onValueChange={(v) => setWindowStart(Number(v))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-52 overflow-y-scroll">
-                        {HOUR_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={String(opt.value)}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <>
+                  <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">From</Label>
+                      <Select
+                        value={String(windowStart)}
+                        onValueChange={(v) => setWindowStart(Number(v))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-52 overflow-y-scroll">
+                          {HOUR_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={String(opt.value)}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">To</Label>
+                      <Select
+                        value={String(windowEnd)}
+                        onValueChange={(v) => setWindowEnd(Number(v))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-52 overflow-y-scroll">
+                          {HOUR_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={String(opt.value)}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">To</Label>
-                    <Select
-                      value={String(windowEnd)}
-                      onValueChange={(v) => setWindowEnd(Number(v))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-52 overflow-y-scroll">
-                        {HOUR_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={String(opt.value)}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                  <p className="text-xs text-muted-foreground">
+                    {userTimezone ? (
+                      <>Times are in <span className="font-medium text-foreground">{userTimezone}</span> · <Link href="/settings" className="underline underline-offset-2">Change in Settings</Link></>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        No timezone set — defaulting to UTC ·{" "}
+                        <Link href="/settings" className="underline underline-offset-2">Set your timezone in Settings</Link>
+                      </span>
+                    )}
+                  </p>
+                </>
               )}
             </div>
           </div>

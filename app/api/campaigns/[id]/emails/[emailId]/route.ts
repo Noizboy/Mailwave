@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { CampaignEmailStatus } from "@/app/generated/prisma/client";
 import { z } from "zod";
 import { getAuthenticatedUser } from "@/lib/api/session";
 import { findOwnedCampaign } from "@/lib/api/ownership";
@@ -49,9 +50,19 @@ export async function PATCH(
     return NextResponse.json({ error: "Contact is suppressed" }, { status: 403 });
   }
 
+  const statusTransition: { status?: CampaignEmailStatus } = {};
+  if (parsed.data.approvalStatus === "approved" && emailExists.status === "generated") {
+    statusTransition.status = CampaignEmailStatus.approved;
+  } else if (
+    (parsed.data.approvalStatus === "pending" || parsed.data.approvalStatus === "rejected") &&
+    emailExists.status === "approved"
+  ) {
+    statusTransition.status = CampaignEmailStatus.generated;
+  }
+
   await prisma.campaignEmail.update({
     where: { id: emailId },
-    data: parsed.data,
+    data: { ...parsed.data, ...statusTransition },
   });
 
   return NextResponse.json({ ok: true });

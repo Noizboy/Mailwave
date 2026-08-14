@@ -233,6 +233,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const canSend =
     ["ready_to_send", "paused"].includes(campaign.status) || allReviewed;
   const canPause = campaign.status === "sending";
+  const canCancel = ["sending", "paused"].includes(campaign.status);
   const isGenerating = campaign.status === "generating";
   const hasFailures =
     campaign.failedCount > 0 &&
@@ -417,14 +418,14 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                         Retry Failed
                       </Button>
                     )}
-                    {hasFailures && (
+                    {canCancel && (
                       <Button
                         size="sm"
                         onClick={handleCancel}
                         variant="destructive"
                       >
                         <XCircle className="h-4 w-4" />
-                        Cancel
+                        Cancel Send
                       </Button>
                     )}
                     <Button

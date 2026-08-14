@@ -20,7 +20,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       status: "generated",
       approvalStatus: "pending",
     },
-    data: { approvalStatus: "approved" },
+    data: { approvalStatus: "approved", status: "approved" },
   });
 
   const approvedCount = await prisma.campaignEmail.count({

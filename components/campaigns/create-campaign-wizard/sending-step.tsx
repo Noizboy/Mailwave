@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import type { UseFormReturn } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,6 +36,13 @@ export function SendingStep({
   const sendWindowStart = form.watch("sendWindowStart");
   const sendWindowEnd = form.watch("sendWindowEnd");
   const windowEnabled = sendWindowStart !== null && sendWindowStart !== undefined;
+
+  const { data: accountData } = useQuery<{ timezone: string | null }>({
+    queryKey: ["settings-account"],
+    queryFn: () => fetch("/api/settings/account").then((r) => r.json()),
+    staleTime: Infinity,
+  });
+  const userTimezone = accountData?.timezone ?? null;
 
   const toggleWindow = (enabled: boolean) => {
     if (enabled) {
@@ -98,48 +107,60 @@ export function SendingStep({
           <Switch checked={windowEnabled} onCheckedChange={toggleWindow} />
         </div>
         {windowEnabled && (
-          <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">From</Label>
-              <Select
-                value={String(sendWindowStart)}
-                onValueChange={(v) =>
-                  form.setValue("sendWindowStart", Number(v))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="max-h-52 overflow-y-auto">
-                  {HOUR_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={String(opt.value)}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <>
+            <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">From</Label>
+                <Select
+                  value={String(sendWindowStart)}
+                  onValueChange={(v) =>
+                    form.setValue("sendWindowStart", Number(v))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-52 overflow-y-auto">
+                    {HOUR_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={String(opt.value)}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">To</Label>
+                <Select
+                  value={String(sendWindowEnd)}
+                  onValueChange={(v) =>
+                    form.setValue("sendWindowEnd", Number(v))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-52 overflow-y-auto">
+                    {HOUR_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={String(opt.value)}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">To</Label>
-              <Select
-                value={String(sendWindowEnd)}
-                onValueChange={(v) =>
-                  form.setValue("sendWindowEnd", Number(v))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="max-h-52 overflow-y-auto">
-                  {HOUR_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={String(opt.value)}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+            <p className="text-xs text-muted-foreground">
+              {userTimezone ? (
+                <>Times are in <span className="font-medium text-foreground">{userTimezone}</span> · <Link href="/settings" className="underline underline-offset-2">Change in Settings</Link></>
+              ) : (
+                <span className="text-amber-600 dark:text-amber-400">
+                  No timezone set — defaulting to UTC ·{" "}
+                  <Link href="/settings" className="underline underline-offset-2">Set your timezone in Settings</Link>
+                </span>
+              )}
+            </p>
+          </>
         )}
       </div>
     </>

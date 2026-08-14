@@ -178,8 +178,8 @@ export function useCampaignActions(
     });
     if (res.ok) {
       toast.success(
-        "Campaign reset",
-        "Failed emails have been reset. You can now re-send the campaign."
+        "Sending cancelled",
+        "Campaign has been reset to ready to send. You can start a new send when ready."
       );
       invalidate();
     } else {

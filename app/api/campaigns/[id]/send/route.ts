@@ -35,7 +35,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     where: {
       campaignId: id,
       approvalStatus: "approved",
-      status: { in: ["generated", "approved"] },
+      status: "approved",
     },
   });
   if (approvedCount === 0) {

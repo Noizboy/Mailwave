@@ -46,7 +46,9 @@ export async function POST(
       campaignId: id,
       contact: { status: { not: "suppressed" } },
     },
-    data: { approvalStatus },
+    data: approvalStatus === "approved"
+      ? { approvalStatus: "approved", status: "approved" }
+      : { approvalStatus },
   });
 
   return NextResponse.json({ updated: result.count });

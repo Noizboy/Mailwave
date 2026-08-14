@@ -26,7 +26,7 @@ export function deriveCampaignMetrics(emails: CampaignEmailMetricInput[]): Campa
     if (email.status === "sent") sentCount++;
     if (email.status === "failed") failedCount++;
     if (email.status === "skipped" || email.approvalStatus === "skipped") skippedCount++;
-    if ((email.status === "generated" || email.status === "approved") && email.approvalStatus !== "skipped") pendingCount++;
+    if (email.status === "approved" && email.approvalStatus !== "skipped") pendingCount++;
     if (email.approvalStatus === "pending" && email.status === "generated") approvalPendingCount++;
     if (email.approvalStatus === "approved") approvedCount++;
     if (email.approvalStatus === "rejected") rejectedCount++;
