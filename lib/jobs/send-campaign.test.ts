@@ -22,6 +22,7 @@ vi.mock("@/lib/prisma", () => {
     campaign: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     smtpConfig: { findUnique: vi.fn() },
     sendingAccount: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn() },
     campaignEmail: { findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
     deliveryEvent: { count: vi.fn(), create: vi.fn(), findFirst: vi.fn() },
     contact: { update: vi.fn() },
@@ -70,9 +71,12 @@ const baseCampaign = {
   status: "ready_to_send",
   activeSendRunId: null,
   startedAt: null,
+  nextSendAt: null,
   intervalType: "fixed",
   minInterval: 0, // keeps the inter-send setTimeout at 0ms in tests
   maxInterval: 0,
+  sendWindowStart: null,
+  sendWindowEnd: null,
 };
 
 const smtpConfig = {
@@ -116,6 +120,7 @@ describe("processSend", () => {
     mocked(prisma.campaign.update).mockResolvedValue({} as never);
     mocked(prisma.smtpConfig.findUnique).mockResolvedValue(smtpConfig as never);
     mocked(prisma.sendingAccount.findUnique).mockResolvedValue(null as never);
+    mocked(prisma.user.findUnique).mockResolvedValue(null as never);
     mocked(prisma.campaignEmail.findMany).mockResolvedValue([] as never);
     mocked(prisma.campaignEmail.update).mockResolvedValue({} as never);
     mocked(prisma.campaignEmail.count).mockResolvedValue(0 as never);
@@ -180,7 +185,7 @@ describe("processSend", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           approvalStatus: "approved",
-          status: { in: ["generated", "approved"] },
+          status: "approved",
           contact: { status: "subscribed" },
         }),
       })

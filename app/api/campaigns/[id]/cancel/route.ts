@@ -19,9 +19,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Campaign cannot be cancelled from its current state" }, { status: 409 });
   }
 
+  // Remove any delayed/waiting send jobs for this campaign. Job IDs use the
+  // pattern send-{campaignId}-{sendRunId}, so we scan delayed jobs by data
+  // rather than relying on a fixed ID (which only matched legacy scheduled sends).
   const queue = getSendQueue();
-  const delayedJob = await queue.getJob(`scheduled-send-${id}`);
-  if (delayedJob) await delayedJob.remove();
+  const delayedJobs = await queue.getDelayed();
+  await Promise.all(
+    delayedJobs
+      .filter((job) => job.data.campaignId === id)
+      .map((job) => job.remove().catch(() => {}))
+  );
 
   // Pause first so any running send job stops on its next iteration
   await prisma.campaign.update({

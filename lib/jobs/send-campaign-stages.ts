@@ -694,6 +694,7 @@ export async function finalizeSendRun(args: {
       campaignId,
       approvalStatus: "approved",
       status: "approved",
+      contact: { status: "subscribed" },
     },
   });
   const emailMetrics = deriveCampaignMetrics(

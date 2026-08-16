@@ -2,13 +2,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const queueAdd = vi.fn();
-const queueGetJob = vi.fn();
+const queueGetDelayed = vi.fn();
 
 vi.mock("@/lib/auth");
 vi.mock("@/lib/prisma");
 vi.mock("@/lib/jobs/queue", () => ({
   getGenerateQueue: () => ({ add: queueAdd }),
-  getSendQueue: () => ({ add: queueAdd, getJob: queueGetJob }),
+  getSendQueue: () => ({ add: queueAdd, getDelayed: queueGetDelayed }),
 }));
 
 import { prisma } from "@/lib/prisma";
@@ -343,9 +343,12 @@ describe("api/campaigns", () => {
   });
 
   describe("POST /api/campaigns/[id]/cancel", () => {
-    it("removes the delayed scheduled-send job when cancelling", async () => {
+    it("removes all delayed send jobs for the campaign when cancelling", async () => {
       const mockRemove = vi.fn().mockResolvedValue(undefined);
-      queueGetJob.mockResolvedValue({ remove: mockRemove });
+      queueGetDelayed.mockResolvedValue([
+        { data: { campaignId: "camp-1" }, remove: mockRemove },
+        { data: { campaignId: "camp-other" }, remove: vi.fn() },
+      ]);
       mocked(prisma.campaign.findFirst).mockResolvedValue({
         ...campaign,
         status: "sending",
@@ -359,12 +362,12 @@ describe("api/campaigns", () => {
       );
 
       expect(res.status).toBe(200);
-      expect(queueGetJob).toHaveBeenCalledWith("scheduled-send-camp-1");
+      expect(queueGetDelayed).toHaveBeenCalled();
       expect(mockRemove).toHaveBeenCalled();
     });
 
-    it("proceeds normally when no delayed job exists for the campaign", async () => {
-      queueGetJob.mockResolvedValue(undefined);
+    it("proceeds normally when no delayed jobs exist for the campaign", async () => {
+      queueGetDelayed.mockResolvedValue([]);
       mocked(prisma.campaign.findFirst).mockResolvedValue({
         ...campaign,
         status: "paused",
@@ -399,7 +402,7 @@ describe("api/campaigns", () => {
       expect((await res.json()).approved).toBe(3);
       expect(prisma.campaignEmail.updateMany).toHaveBeenCalledWith({
         where: { campaignId: "camp-1", status: "generated", approvalStatus: "pending" },
-        data: { approvalStatus: "approved" },
+        data: { approvalStatus: "approved", status: "approved" },
       });
       expect(prisma.campaign.update).toHaveBeenCalledWith({
         where: { id: "camp-1" },
