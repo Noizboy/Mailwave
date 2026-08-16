@@ -180,6 +180,10 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code fence
           { role: "user", content: fullPrompt },
         ],
         max_tokens: 2048,
+        // Force JSON output on providers that support the OpenAI response_format
+        // spec (OpenAI, OpenRouter, Gemini via OpenAI-compat). Providers that
+        // ignore or reject this field fall through to the existing parse logic.
+        response_format: { type: "json_object" },
       },
       { signal }
     );
