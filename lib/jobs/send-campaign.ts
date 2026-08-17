@@ -99,7 +99,7 @@ export async function processSend(job: Job<SendCampaignJobData>): Promise<SendRu
 
     // Reload user-configurable values each iteration so changes made while
     // the campaign is running take effect without a pause/resume cycle.
-    const mutableConfig = await loadMutableSendingConfig(userId, smtpSettings);
+    const mutableConfig = await loadMutableSendingConfig(userId, campaignId, smtpSettings);
     const currentSmtpSettings = { ...smtpSettings, hourlyLimit: mutableConfig.hourlyLimit, dailyLimit: mutableConfig.dailyLimit };
 
     // --- Stage 2: continuation decision ---
@@ -152,7 +152,7 @@ export async function processSend(job: Job<SendCampaignJobData>): Promise<SendRu
 
     // Apply the inter-send interval: update `nextSendAt` and re-enqueue a
     // continuation job when the interval is long enough to avoid blocking.
-    const interval = applyInterval(campaign, index, pendingEmails.length);
+    const interval = applyInterval(mutableConfig, index, pendingEmails.length);
     await prisma.campaign.update({
       where: { id: campaignId },
       data: interval.nextSendAtUpdate,

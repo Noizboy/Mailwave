@@ -299,21 +299,39 @@ export async function loadSuppressAfterEmails(userId: string): Promise<number> {
  * Load all user-configurable values that can change mid-run in a single
  * parallel fetch. Called once per loop iteration so edits to sending
  * configuration take effect without requiring a pause/resume cycle.
+ * Includes campaign-level interval settings so changes to intervalType /
+ * minInterval / maxInterval are also respected without a pause/resume cycle.
  */
 export async function loadMutableSendingConfig(
   userId: string,
+  campaignId: string,
   fallback: Pick<SmtpSettings, "hourlyLimit" | "dailyLimit">
-): Promise<{ hourlyLimit: number; dailyLimit: number; userTimezone: string; suppressAfterEmails: number }> {
-  const [smtpConfig, user, sendingAccount] = await Promise.all([
+): Promise<{
+  hourlyLimit: number;
+  dailyLimit: number;
+  userTimezone: string;
+  suppressAfterEmails: number;
+  intervalType: string;
+  minInterval: number;
+  maxInterval: number;
+}> {
+  const [smtpConfig, user, sendingAccount, campaignInterval] = await Promise.all([
     prisma.smtpConfig.findUnique({ where: { userId }, select: { hourlyLimit: true, dailyLimit: true } }),
     prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } }),
     prisma.sendingAccount.findUnique({ where: { userId }, select: { suppressAfterEmails: true } }),
+    prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { intervalType: true, minInterval: true, maxInterval: true },
+    }),
   ]);
   return {
     hourlyLimit: smtpConfig?.hourlyLimit ?? fallback.hourlyLimit,
     dailyLimit: smtpConfig?.dailyLimit ?? fallback.dailyLimit,
     userTimezone: user?.timezone ?? "UTC",
     suppressAfterEmails: sendingAccount?.suppressAfterEmails ?? 3,
+    intervalType: campaignInterval?.intervalType ?? "random",
+    minInterval: campaignInterval?.minInterval ?? 3,
+    maxInterval: campaignInterval?.maxInterval ?? 8,
   };
 }
 
@@ -667,15 +685,18 @@ export type IntervalResult = {
  * orchestrator should re-enqueue a continuation job instead of looping inline.
  * Returns the campaign `nextSendAt` update to apply regardless (so the UI
  * reflects the scheduled next send even in burst mode).
+ * Accepts the interval fields separately (sourced from `loadMutableSendingConfig`)
+ * so that changes to intervalType / minInterval / maxInterval take effect
+ * without a pause/resume cycle.
  */
 export function applyInterval(
-  campaign: SendCampaignRef,
+  intervalConfig: Pick<SendCampaignRef, "intervalType" | "minInterval" | "maxInterval">,
   index: number,
   totalEmails: number
 ): IntervalResult {
-  const interval = campaign.intervalType === "random"
-    ? Math.floor(Math.random() * (campaign.maxInterval - campaign.minInterval + 1) + campaign.minInterval)
-    : campaign.minInterval;
+  const interval = intervalConfig.intervalType === "random"
+    ? Math.floor(Math.random() * (intervalConfig.maxInterval - intervalConfig.minInterval + 1) + intervalConfig.minInterval)
+    : intervalConfig.minInterval;
   const hasMorePendingEmails = index < totalEmails - 1;
   const intervalMs = interval * 60 * 1000;
   const nextSendAtUpdate = {
