@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
 import { getAuthenticatedUser } from "@/lib/api/session";
 import { findOwnedCampaign } from "@/lib/api/ownership";
+import { getSendQueue } from "@/lib/jobs/queue";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -89,12 +91,55 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
+  // If interval fields are being saved, fetch the current campaign first so we
+  // can detect whether a re-schedule is needed (campaign is actively sending).
+  const hasIntervalChange =
+    parsed.data.intervalType !== undefined ||
+    parsed.data.minInterval !== undefined ||
+    parsed.data.maxInterval !== undefined;
+
+  const currentCampaign = hasIntervalChange
+    ? await prisma.campaign.findFirst({
+        where: { id, userId: user.id },
+        select: { status: true, minInterval: true },
+      })
+    : null;
+
   const updated = await prisma.campaign.updateMany({
     where: { id, userId: user.id },
     data: parsed.data,
   });
 
   if (updated.count === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // When interval config changes while the campaign is actively sending, reschedule
+  // the next send job so both the UI countdown and the actual delivery time
+  // reflect the new interval immediately. The old BullMQ job will no-op because
+  // `activeSendRunId` won't match the new run ID.
+  if (hasIntervalChange && currentCampaign?.status === "sending") {
+    const newMinInterval = parsed.data.minInterval ?? currentCampaign.minInterval;
+    const newDelayMs = newMinInterval * 60_000;
+    const newNextSendAt = new Date(Date.now() + newDelayMs);
+    const newSendRunId = randomUUID();
+
+    await prisma.campaign.updateMany({
+      where: { id, userId: user.id },
+      data: { nextSendAt: newNextSendAt, activeSendRunId: newSendRunId },
+    });
+
+    await getSendQueue().add(
+      "send",
+      { campaignId: id, userId: user.id, sendRunId: newSendRunId },
+      {
+        delay: newDelayMs,
+        jobId: `send-${id}-${newSendRunId}`,
+        attempts: 1,
+        removeOnComplete: { age: 3600 },
+        removeOnFail: { age: 86400 },
+      }
+    );
+  }
+
   return NextResponse.json({ ok: true });
 }
 

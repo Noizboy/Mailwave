@@ -99,7 +99,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       }
     );
 
-    return NextResponse.json({ jobId: job.id, status: "queued" });
+    return NextResponse.json({ jobId: job.id, status: "queued", nextSendAt: firstNextSendAt });
   } catch (error) {
     await prisma.campaign.update({
       where: { id: campaign.id },

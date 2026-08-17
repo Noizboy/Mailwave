@@ -116,14 +116,16 @@ export function useCampaignActions(
       method: "POST",
     });
     if (res.ok) {
+      const { nextSendAt } = await res.json();
       toast.success(
         "Sending started",
         "Emails are being delivered. Monitor progress on this page."
       );
-      // Optimistic update: reflect "sending" immediately so the progress
-      // section shows "Sending emails…" without waiting for the background refetch.
+      // Optimistic update: reflect "sending" and the fresh nextSendAt immediately
+      // so the "Next email in…" countdown is correct without waiting for the
+      // background refetch (avoids showing a stale timestamp from before the pause).
       qc.setQueryData(["campaign", campaignId], (old: Record<string, unknown> | undefined) =>
-        old ? { ...old, status: "sending" } : old
+        old ? { ...old, status: "sending", nextSendAt } : old
       );
       invalidate();
     } else {

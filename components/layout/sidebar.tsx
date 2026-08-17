@@ -88,7 +88,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       {/* Version + credits */}
       <div className="mt-auto flex flex-col items-center gap-0.5 pb-1 pt-4 text-center">
         <span className="text-[11px] text-white/30">
-          Version v1.1.6
+          Version v1.1.7
         </span>
         <a
           href="https://www.linkedin.com/in/alejandro-gomez-pujols/"
