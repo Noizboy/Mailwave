@@ -16,7 +16,6 @@ model User {
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   aiConfig                AiConfig?
-  apiKeys                 ApiKey[]
   campaigns               Campaign[]
   contacts                Contact[]
   imports                 Import[]
@@ -270,18 +269,6 @@ model SystemLog {
   @@index([userId])
 }
 
-model ApiKey {
-  id         String    @id @default(cuid())
-  userId     String
-  name       String
-  keyHash    String    @unique
-  lastUsedAt DateTime?
-  revokedAt  DateTime?
-  createdAt  DateTime  @default(now())
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
 
 enum ContactStatus {
   subscribed
