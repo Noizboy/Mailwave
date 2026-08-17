@@ -2,29 +2,33 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Footer credit** — the "Created by Alejandro Pujols" credit in the sidebar is now a link to his LinkedIn profile. Bumped version to `v1.1.6`.
+
 ## [2026-08-17]
 
 ### Added
 
-- **Public Logs API** (`GET /api/public/logs`) — endpoint público para consultar logs del sistema, protegido por API key via header `X-Api-Key`.
-- **SystemLog table** — nueva tabla en BD que almacena eventos estructurados con `level` (info/warn/error), `category`, `message`, `metadata` JSON, `userId` y `createdAt`.
-- **ApiKey table** — gestión de API keys por usuario con hash SHA-256, `lastUsedAt` y revocación suave (`revokedAt`).
-- **`lib/logger.ts`** — utilidad de logging fire-and-forget que nunca bloquea el caller.
-- **`lib/api-key.ts`** — generación, hasheo y validación de API keys; soporta clave estática via `PUBLIC_LOGS_API_KEY`.
-- **API key management routes** — `POST /api/api-keys`, `GET /api/api-keys`, `DELETE /api/api-keys/:id` (requieren sesión).
-- **Debug endpoint** (`GET /api/public/logs/debug`) — verifica que `PUBLIC_LOGS_API_KEY` esté cargada en el contenedor.
-- **`PUBLIC_LOGS_API_KEY`** env var — clave estática para el endpoint público; declarada en `.env.example` y `docker-compose.yml`.
+- **Public Logs API** (`GET /api/public/logs`) — public endpoint to query system logs, protected by an API key via the `X-Api-Key` header.
+- **SystemLog table** — new DB table that stores structured events with `level` (info/warn/error), `category`, `message`, JSON `metadata`, `userId` and `createdAt`.
+- **ApiKey table** — per-user API key management with SHA-256 hashing, `lastUsedAt` and soft revocation (`revokedAt`).
+- **`lib/logger.ts`** — fire-and-forget logging utility that never blocks the caller.
+- **`lib/api-key.ts`** — API key generation, hashing and validation; supports a static key via `PUBLIC_LOGS_API_KEY`.
+- **API key management routes** — `POST /api/api-keys`, `GET /api/api-keys`, `DELETE /api/api-keys/:id` (require a session).
+- **Debug endpoint** (`GET /api/public/logs/debug`) — verifies that `PUBLIC_LOGS_API_KEY` is loaded in the container.
+- **`PUBLIC_LOGS_API_KEY`** env var — static key for the public endpoint; declared in `.env.example` and `docker-compose.yml`.
 
 ### Instrumentation
 
-Eventos registrados automáticamente en `SystemLog`:
+Events recorded automatically in `SystemLog`:
 
-| Category   | Eventos |
-|------------|---------|
-| `auth`     | Login exitoso, fallido (email desconocido / contraseña incorrecta), rate-limit bloqueado |
-| `campaign` | Generación iniciada, completada, sin contactos elegibles |
-| `ai`       | Error de configuración AI, fallo por contacto, error de servicio AI |
-| `smtp`     | Email enviado, email fallido |
+| Category   | Events |
+|------------|--------|
+| `auth`     | Successful login, failed login (unknown email / wrong password), rate-limit blocked |
+| `campaign` | Generation started, completed, no eligible contacts |
+| `ai`       | AI config error, per-contact failure, AI service error |
+| `smtp`     | Email sent, email failed |
 
 ### Filters supported
 
@@ -32,5 +36,5 @@ Eventos registrados automáticamente en `SystemLog`:
 
 ### Docs
 
-- [`docs/public-logs-api.md`](docs/public-logs-api.md) — referencia completa del endpoint
-- [`docs/archive/easypanel-installation.md`](docs/archive/easypanel-installation.md) — actualizado con `PUBLIC_LOGS_API_KEY`
+- [`docs/public-logs-api.md`](docs/public-logs-api.md) — full endpoint reference
+- [`docs/archive/easypanel-installation.md`](docs/archive/easypanel-installation.md) — updated with `PUBLIC_LOGS_API_KEY`

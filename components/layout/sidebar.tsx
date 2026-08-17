@@ -88,11 +88,16 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       {/* Version + credits */}
       <div className="mt-auto flex flex-col items-center gap-0.5 pb-1 pt-4 text-center">
         <span className="text-[11px] text-white/30">
-          Version v1.1.5
+          Version v1.1.6
         </span>
-        <span className="text-[11px] text-white/30">
+        <a
+          href="https://www.linkedin.com/in/alejandro-gomez-pujols/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11px] text-white/30 transition-colors hover:text-white/60"
+        >
           Created by Alejandro Pujols
-        </span>
+        </a>
       </div>
     </div>
   );
