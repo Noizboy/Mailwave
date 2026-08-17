@@ -125,7 +125,7 @@ async function runGeneration(
     } else if (outcome.kind === "failed") {
       failCount++;
       console.error(`${tag} Contact ${contact.id} (${contact.email}) failed: ${outcome.error.message}`);
-      logger.error("ai", `Email generation failed for contact ${contact.email}`, { campaignId, contactId: contact.id, error: outcome.error.message }, userId);
+      logger.error("ai", `Email generation failed for contact ${contact.email}`, { campaignId, contactId: contact.id, error: outcome.error.message, provider: aiConfig.config.provider, model: aiConfig.config.model }, userId);
     } else {
       // Service-level failure: abort the whole run rather than failing every
       // remaining contact. No email row was persisted for this contact.

@@ -227,7 +227,9 @@ export function isAlreadyHandled(
 // Stage 5: Generate + persist one contact's email (never throws)
 // ---------------------------------------------------------------------------
 
-const CONTACT_MAX_RETRIES = 1;
+// 3 retries = 4 total attempts; exponential backoff: 2s → 4s → 8s
+const CONTACT_MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 2_000;
 
 /**
  * Build the per-contact user prompt, call the AI provider, and persist the
@@ -238,8 +240,9 @@ const CONTACT_MAX_RETRIES = 1;
  * contact. Provider calls are strictly sequential — the orchestrator invokes
  * this once per contact.
  *
- * Non-service errors (e.g. truncated/malformed JSON from the AI) are retried
- * once with a 1 s backoff before the contact is marked failed.
+ * Non-service errors (e.g. empty/malformed JSON from the AI) are retried up to
+ * CONTACT_MAX_RETRIES times with exponential backoff before the contact is
+ * marked failed.
  */
 export async function generateForContact(
   campaignId: string,
@@ -308,7 +311,8 @@ export async function generateForContact(
       lastErr = err instanceof Error ? err : new Error("Unknown error");
 
       if (attempt < CONTACT_MAX_RETRIES) {
-        await new Promise((res) => setTimeout(res, 1000 * (attempt + 1)));
+        // Exponential backoff: 2s, 4s, 8s
+        await new Promise((res) => setTimeout(res, RETRY_BASE_DELAY_MS * Math.pow(2, attempt)));
       }
     }
   }

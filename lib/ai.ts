@@ -203,7 +203,7 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code fence
 
   if (!jsonStr) {
     throw new Error(
-      `AI returned an empty response (provider: ${input.provider}, model: ${input.model})`
+      `AI returned an empty response (provider: ${input.provider}, model: ${input.model}, raw_length: ${content.length})`
     );
   }
 
