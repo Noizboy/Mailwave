@@ -58,6 +58,9 @@ Optional variables:
 - `TRAEFIK_NETWORK`
 - `TRAEFIK_CERT_RESOLVER`
 - `TRAEFIK_HTTP_MIDDLEWARE`
+- `PUBLIC_LOGS_API_KEY`
+  Static key for the public logs API (`GET /api/public/logs`). Generate with `openssl rand -hex 32`.
+  See [Public Logs API](../public-logs-api.md) for full usage.
 
 Notes:
 
