@@ -295,6 +295,28 @@ export async function loadSuppressAfterEmails(userId: string): Promise<number> {
   return sendingAccount?.suppressAfterEmails ?? 3;
 }
 
+/**
+ * Load all user-configurable values that can change mid-run in a single
+ * parallel fetch. Called once per loop iteration so edits to sending
+ * configuration take effect without requiring a pause/resume cycle.
+ */
+export async function loadMutableSendingConfig(
+  userId: string,
+  fallback: Pick<SmtpSettings, "hourlyLimit" | "dailyLimit">
+): Promise<{ hourlyLimit: number; dailyLimit: number; userTimezone: string; suppressAfterEmails: number }> {
+  const [smtpConfig, user, sendingAccount] = await Promise.all([
+    prisma.smtpConfig.findUnique({ where: { userId }, select: { hourlyLimit: true, dailyLimit: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } }),
+    prisma.sendingAccount.findUnique({ where: { userId }, select: { suppressAfterEmails: true } }),
+  ]);
+  return {
+    hourlyLimit: smtpConfig?.hourlyLimit ?? fallback.hourlyLimit,
+    dailyLimit: smtpConfig?.dailyLimit ?? fallback.dailyLimit,
+    userTimezone: user?.timezone ?? "UTC",
+    suppressAfterEmails: sendingAccount?.suppressAfterEmails ?? 3,
+  };
+}
+
 /** Load approved, unsent emails for subscribed contacts, oldest first. */
 export async function loadPendingEmails(campaignId: string): Promise<PendingEmail[]> {
   return prisma.campaignEmail.findMany({

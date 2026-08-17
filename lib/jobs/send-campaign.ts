@@ -7,8 +7,7 @@ import { getNotifPrefs } from "./notification-prefs";
 import {
   claimSendRun,
   loadSmtpTransport,
-  loadSuppressAfterEmails,
-  loadUserTimezone,
+  loadMutableSendingConfig,
   loadPendingEmails,
   loadRateLimitCounts,
   decideContinuation,
@@ -76,9 +75,7 @@ export async function processSend(job: Job<SendCampaignJobData>): Promise<SendRu
   }
   const { smtpSettings, transporter } = smtp;
 
-  const [suppressAfterEmails, userTimezone, pendingEmails, rateLimitCounts] = await Promise.all([
-    loadSuppressAfterEmails(userId),
-    loadUserTimezone(userId),
+  const [pendingEmails, rateLimitCounts] = await Promise.all([
     loadPendingEmails(campaignId),
     loadRateLimitCounts(userId),
   ]);
@@ -100,16 +97,21 @@ export async function processSend(job: Job<SendCampaignJobData>): Promise<SendRu
   for (let index = 0; index < pendingEmails.length; index++) {
     const email = pendingEmails[index];
 
+    // Reload user-configurable values each iteration so changes made while
+    // the campaign is running take effect without a pause/resume cycle.
+    const mutableConfig = await loadMutableSendingConfig(userId, smtpSettings);
+    const currentSmtpSettings = { ...smtpSettings, hourlyLimit: mutableConfig.hourlyLimit, dailyLimit: mutableConfig.dailyLimit };
+
     // --- Stage 2: continuation decision ---
     const decision = await decideContinuation({
       campaignId,
       sendRunId,
       email,
-      suppressAfterEmails,
-      smtpSettings,
+      suppressAfterEmails: mutableConfig.suppressAfterEmails,
+      smtpSettings: currentSmtpSettings,
       rateLimitCounts,
       rateLimitWindowStart,
-      userTimezone,
+      userTimezone: mutableConfig.userTimezone,
     });
 
     if (decision.action === "stop") {
@@ -130,11 +132,11 @@ export async function processSend(job: Job<SendCampaignJobData>): Promise<SendRu
     }
 
     // --- Stage 3: send one email ---
-    const outcome = await sendOneEmail(email, transporter, smtpSettings);
+    const outcome = await sendOneEmail(email, transporter, currentSmtpSettings);
 
     // --- Stage 4: persist the outcome transactionally ---
     if (outcome.status === "sent") {
-      await persistSendSuccess(campaignId, email, suppressAfterEmails);
+      await persistSendSuccess(campaignId, email, mutableConfig.suppressAfterEmails);
       sentCount++;
       rateLimitCounts.sentLastHour++;
       rateLimitCounts.sentLastDay++;
