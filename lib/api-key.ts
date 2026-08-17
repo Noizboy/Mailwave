@@ -14,8 +14,8 @@ export function hashApiKey(key: string): string {
 /** Returns the userId (or "__env__" for env-based keys) if valid, null otherwise. */
 export async function validateApiKey(raw: string): Promise<string | null> {
   // Static key configured in .env takes priority — no DB lookup needed
-  const envKey = process.env.PUBLIC_LOGS_API_KEY;
-  if (envKey && raw === envKey) return "__env__";
+  const envKey = process.env.PUBLIC_LOGS_API_KEY?.trim();
+  if (envKey && raw.trim() === envKey) return "__env__";
 
   if (!raw.startsWith("mw_")) return null;
   const hash = hashApiKey(raw);
