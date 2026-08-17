@@ -20,8 +20,7 @@ export async function GET(req: NextRequest) {
   const apiKey = req.headers.get("x-api-key");
   if (!apiKey) return NextResponse.json({ error: "Missing X-Api-Key header" }, { status: 401 });
 
-  const ownerId = await validateApiKey(apiKey);
-  if (!ownerId) return NextResponse.json({ error: "Invalid or revoked API key" }, { status: 401 });
+  if (!validateApiKey(apiKey)) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
 
   const params = Object.fromEntries(req.nextUrl.searchParams);
   const parsed = querySchema.safeParse(params);
