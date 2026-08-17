@@ -92,23 +92,31 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
-  // If any sending-schedule field is being saved, fetch the current campaign
-  // so we can detect whether a reschedule is needed (campaign actively sending).
-  const hasSendingScheduleChange =
-    parsed.data.intervalType !== undefined ||
-    parsed.data.minInterval !== undefined ||
-    parsed.data.maxInterval !== undefined ||
+  // If a sending window field is being saved, we need to check whether the
+  // currently-scheduled nextSendAt falls outside the new window — if so the
+  // job must be rescheduled. Interval-only changes do NOT force a reschedule:
+  // the already-committed nextSendAt is honoured and the new interval applies
+  // from the email after the currently-scheduled one (the worker reads interval
+  // config fresh on every iteration via loadMutableSendingConfig).
+  const hasWindowChange =
     parsed.data.sendWindowStart !== undefined ||
     parsed.data.sendWindowEnd !== undefined;
 
-  const currentCampaign = hasSendingScheduleChange
+  const currentCampaign = hasWindowChange
     ? await prisma.campaign.findFirst({
         where: { id, userId: user.id },
         select: {
           status: true,
           minInterval: true,
+          nextSendAt: true,
           sendWindowStart: true,
           sendWindowEnd: true,
+          emails: {
+            where: { status: "sent" },
+            select: { sentAt: true },
+            orderBy: { sentAt: "desc" },
+            take: 1,
+          },
         },
       })
     : null;
@@ -120,13 +128,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (updated.count === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // When sending schedule changes while the campaign is actively sending, reschedule
-  // the next send job so both the UI countdown and actual delivery reflect the new
-  // config immediately. The old BullMQ job no-ops when it fires because
-  // `activeSendRunId` won't match the new run ID.
-  if (hasSendingScheduleChange && currentCampaign?.status === "sending") {
-    const newMinInterval = parsed.data.minInterval ?? currentCampaign.minInterval;
-    // Resolve effective window after applying the patch (null means "no window").
+  // Reschedule only when a window change makes the current nextSendAt invalid.
+  // Semantics:
+  //   - If nextSendAt is already within the new window → keep it (no disruption).
+  //   - If nextSendAt is outside the new window (or there is no nextSendAt) →
+  //     reschedule to when the new window opens (or immediately if we are inside it).
+  // The old BullMQ job no-ops when it fires because activeSendRunId won't match.
+  if (hasWindowChange && currentCampaign?.status === "sending") {
     const newWindowStart =
       "sendWindowStart" in parsed.data
         ? parsed.data.sendWindowStart
@@ -136,12 +144,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ? parsed.data.sendWindowEnd
         : currentCampaign.sendWindowEnd;
 
-    let newDelayMs = newMinInterval * 60_000;
-
-    // If a sending window is configured, check whether we're currently inside
-    // it. If outside, the next send must wait until the window opens — which
-    // may be sooner than the currently-scheduled time (the whole reason the
-    // user changed the window).
+    // Window disabled — nothing to reschedule; the existing nextSendAt stands.
     if (newWindowStart !== null && newWindowStart !== undefined &&
         newWindowEnd !== null && newWindowEnd !== undefined) {
       const userRow = await prisma.user.findUnique({
@@ -149,38 +152,73 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         select: { timezone: true },
       });
       const tz = userRow?.timezone ?? "UTC";
+
+      // Compute the earliest valid send time under the new window.
+      // If we are currently inside the new window the next opportunity is
+      // now + (remaining interval based on last-sent time). If outside, it
+      // is when the window next opens.
       const now = new Date();
       const nowHour = getHourInTimezone(tz, now);
-      const inWindow =
+      const currentlyInWindow =
         newWindowStart < newWindowEnd
           ? nowHour >= newWindowStart && nowHour < newWindowEnd
           : nowHour >= newWindowStart || nowHour < newWindowEnd;
 
-      if (!inWindow) {
+      let earliestDelayMs: number;
+      if (currentlyInWindow) {
+        // Preserve elapsed time so the interval counter isn't restarted.
+        const lastSentAt = currentCampaign.emails[0]?.sentAt;
+        const elapsedMs = lastSentAt ? now.getTime() - new Date(lastSentAt).getTime() : 0;
+        const intervalMs = (currentCampaign.minInterval ?? 3) * 60_000;
+        earliestDelayMs = Math.max(0, intervalMs - elapsedMs);
+      } else {
         const windowOpens = nextWindowOpenDate(tz, newWindowStart);
-        newDelayMs = windowOpens.getTime() - now.getTime();
+        earliestDelayMs = windowOpens.getTime() - now.getTime();
+      }
+
+      const earliestMs = now.getTime() + earliestDelayMs;
+      const currentScheduledMs = currentCampaign.nextSendAt
+        ? new Date(currentCampaign.nextSendAt).getTime()
+        : Infinity;
+
+      // Check if the currently-scheduled time is valid under the new window.
+      const scheduledHour = currentCampaign.nextSendAt
+        ? getHourInTimezone(tz, new Date(currentCampaign.nextSendAt))
+        : -1;
+      const scheduledInNewWindow =
+        scheduledHour >= 0 &&
+        (newWindowStart < newWindowEnd
+          ? scheduledHour >= newWindowStart && scheduledHour < newWindowEnd
+          : scheduledHour >= newWindowStart || scheduledHour < newWindowEnd);
+
+      // Reschedule when:
+      //   1. The new window opens sooner than the currently-scheduled time, OR
+      //   2. The currently-scheduled time falls outside the new window entirely.
+      const needsReschedule =
+        earliestMs < currentScheduledMs || !scheduledInNewWindow;
+
+      if (needsReschedule) {
+        const newNextSendAt = new Date(earliestMs);
+        const newSendRunId = randomUUID();
+
+        await prisma.campaign.updateMany({
+          where: { id, userId: user.id },
+          data: { nextSendAt: newNextSendAt, activeSendRunId: newSendRunId },
+        });
+
+        await getSendQueue().add(
+          "send",
+          { campaignId: id, userId: user.id, sendRunId: newSendRunId },
+          {
+            delay: Math.max(0, earliestDelayMs),
+            jobId: `send-${id}-${newSendRunId}`,
+            attempts: 1,
+            removeOnComplete: { age: 3600 },
+            removeOnFail: { age: 86400 },
+          }
+        );
       }
     }
-
-    const newNextSendAt = new Date(Date.now() + newDelayMs);
-    const newSendRunId = randomUUID();
-
-    await prisma.campaign.updateMany({
-      where: { id, userId: user.id },
-      data: { nextSendAt: newNextSendAt, activeSendRunId: newSendRunId },
-    });
-
-    await getSendQueue().add(
-      "send",
-      { campaignId: id, userId: user.id, sendRunId: newSendRunId },
-      {
-        delay: Math.max(0, newDelayMs),
-        jobId: `send-${id}-${newSendRunId}`,
-        attempts: 1,
-        removeOnComplete: { age: 3600 },
-        removeOnFail: { age: 86400 },
-      }
-    );
   }
 
   return NextResponse.json({ ok: true });
