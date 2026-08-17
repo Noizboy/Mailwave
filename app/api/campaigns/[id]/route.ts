@@ -5,6 +5,7 @@ import { deriveCampaignMetrics } from "@/lib/campaign-metrics";
 import { getAuthenticatedUser } from "@/lib/api/session";
 import { findOwnedCampaign } from "@/lib/api/ownership";
 import { getSendQueue } from "@/lib/jobs/queue";
+import { getHourInTimezone, nextWindowOpenDate } from "@/lib/jobs/send-campaign-stages";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -91,17 +92,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
-  // If interval fields are being saved, fetch the current campaign first so we
-  // can detect whether a re-schedule is needed (campaign is actively sending).
-  const hasIntervalChange =
+  // If any sending-schedule field is being saved, fetch the current campaign
+  // so we can detect whether a reschedule is needed (campaign actively sending).
+  const hasSendingScheduleChange =
     parsed.data.intervalType !== undefined ||
     parsed.data.minInterval !== undefined ||
-    parsed.data.maxInterval !== undefined;
+    parsed.data.maxInterval !== undefined ||
+    parsed.data.sendWindowStart !== undefined ||
+    parsed.data.sendWindowEnd !== undefined;
 
-  const currentCampaign = hasIntervalChange
+  const currentCampaign = hasSendingScheduleChange
     ? await prisma.campaign.findFirst({
         where: { id, userId: user.id },
-        select: { status: true, minInterval: true },
+        select: {
+          status: true,
+          minInterval: true,
+          sendWindowStart: true,
+          sendWindowEnd: true,
+        },
       })
     : null;
 
@@ -112,13 +120,48 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (updated.count === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // When interval config changes while the campaign is actively sending, reschedule
-  // the next send job so both the UI countdown and the actual delivery time
-  // reflect the new interval immediately. The old BullMQ job will no-op because
+  // When sending schedule changes while the campaign is actively sending, reschedule
+  // the next send job so both the UI countdown and actual delivery reflect the new
+  // config immediately. The old BullMQ job no-ops when it fires because
   // `activeSendRunId` won't match the new run ID.
-  if (hasIntervalChange && currentCampaign?.status === "sending") {
+  if (hasSendingScheduleChange && currentCampaign?.status === "sending") {
     const newMinInterval = parsed.data.minInterval ?? currentCampaign.minInterval;
-    const newDelayMs = newMinInterval * 60_000;
+    // Resolve effective window after applying the patch (null means "no window").
+    const newWindowStart =
+      "sendWindowStart" in parsed.data
+        ? parsed.data.sendWindowStart
+        : currentCampaign.sendWindowStart;
+    const newWindowEnd =
+      "sendWindowEnd" in parsed.data
+        ? parsed.data.sendWindowEnd
+        : currentCampaign.sendWindowEnd;
+
+    let newDelayMs = newMinInterval * 60_000;
+
+    // If a sending window is configured, check whether we're currently inside
+    // it. If outside, the next send must wait until the window opens — which
+    // may be sooner than the currently-scheduled time (the whole reason the
+    // user changed the window).
+    if (newWindowStart !== null && newWindowStart !== undefined &&
+        newWindowEnd !== null && newWindowEnd !== undefined) {
+      const userRow = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { timezone: true },
+      });
+      const tz = userRow?.timezone ?? "UTC";
+      const now = new Date();
+      const nowHour = getHourInTimezone(tz, now);
+      const inWindow =
+        newWindowStart < newWindowEnd
+          ? nowHour >= newWindowStart && nowHour < newWindowEnd
+          : nowHour >= newWindowStart || nowHour < newWindowEnd;
+
+      if (!inWindow) {
+        const windowOpens = nextWindowOpenDate(tz, newWindowStart);
+        newDelayMs = windowOpens.getTime() - now.getTime();
+      }
+    }
+
     const newNextSendAt = new Date(Date.now() + newDelayMs);
     const newSendRunId = randomUUID();
 
@@ -131,7 +174,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       "send",
       { campaignId: id, userId: user.id, sendRunId: newSendRunId },
       {
-        delay: newDelayMs,
+        delay: Math.max(0, newDelayMs),
         jobId: `send-${id}-${newSendRunId}`,
         attempts: 1,
         removeOnComplete: { age: 3600 },

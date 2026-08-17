@@ -87,7 +87,7 @@ const DAY_MS = 86_400_000;
 // ---------------------------------------------------------------------------
 
 /** Return the current hour (0-23) expressed in the given IANA timezone. */
-function getHourInTimezone(tz: string, date: Date): number {
+export function getHourInTimezone(tz: string, date: Date): number {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
     hour: "numeric",
@@ -102,7 +102,7 @@ function getHourInTimezone(tz: string, date: Date): number {
  * DST edge cases are self-correcting: if the job fires slightly early, the window
  * check re-evaluates and re-schedules for the remaining time.
  */
-function nextWindowOpenDate(tz: string, startHour: number): Date {
+export function nextWindowOpenDate(tz: string, startHour: number): Date {
   const now = new Date();
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
