@@ -56,6 +56,7 @@ export interface CampaignDetail {
   nextSendAt: string | null;
   updatedAt: string;
   createdAt: string;
+  lastGenerationError: string | null;
   emails: CampaignEmail[];
 }
 

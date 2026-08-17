@@ -357,11 +357,37 @@ export async function isGenerationCancelled(campaignId: string): Promise<boolean
 // Run-level side effects: failure, finalization, notifications
 // ---------------------------------------------------------------------------
 
-/** Mark the campaign `failed` (single-row update). Used by setup-time failures. */
-export async function markCampaignFailed(campaignId: string): Promise<void> {
+/**
+ * Classify an AI provider error into a short machine-readable code so the UI
+ * can show specific recovery guidance instead of a generic message.
+ *
+ *  - "auth"        → 401/403, invalid or expired API key
+ *  - "rate_limit"  → 429, quota or session limit exceeded
+ *  - "no_contacts" → list is empty or no subscribed contacts
+ *  - "service"     → all other service-level failures
+ */
+export function classifyGenerationError(err: Error): string {
+  const msg = err.message.toLowerCase();
+  if (msg.includes("401") || msg.includes("403") || msg.includes("invalid api key") ||
+      msg.includes("unauthorized") || msg.includes("authentication") ||
+      msg.includes("api key") || msg.includes("apikey")) {
+    return "auth";
+  }
+  if (msg.includes("429") || msg.includes("rate limit") || msg.includes("usage limit") ||
+      msg.includes("quota") || msg.includes("session usage")) {
+    return "rate_limit";
+  }
+  return "service";
+}
+
+/** Mark the campaign `failed` and store the error reason for UI display. */
+export async function markCampaignFailed(
+  campaignId: string,
+  errorCode?: string
+): Promise<void> {
   await prisma.campaign.update({
     where: { id: campaignId },
-    data: { status: "failed" },
+    data: { status: "failed", lastGenerationError: errorCode ?? null },
   });
 }
 
@@ -378,9 +404,10 @@ export async function failGenerationRunAndNotify(args: {
   title: string;
   body: string;
   prefs: NotifPrefs;
+  errorCode?: string;
 }): Promise<void> {
-  const { campaignId, userId, campaignName, title, body, prefs } = args;
-  await markCampaignFailed(campaignId);
+  const { campaignId, userId, campaignName, title, body, prefs, errorCode } = args;
+  await markCampaignFailed(campaignId, errorCode);
   if (prefs.ai_email_error) {
     await prisma.notification.create({
       data: {

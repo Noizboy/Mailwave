@@ -214,8 +214,10 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
 
   const canGenerate = ["pending", "failed"].includes(campaign.status) && !!campaign.list;
   const canResumeReview = campaign.status === "failed" && campaign.pendingCount > 0;
+  const hasFailedGenerationEmails = campaign.emails.some((e) => e.status === "failed");
   const canRetryGeneration =
-    campaign.status === "pending_review" && campaign.failedCount > 0;
+    ["pending_review", "failed"].includes(campaign.status) &&
+    (campaign.failedCount > 0 || hasFailedGenerationEmails);
   // True when generation was cancelled mid-way: some contacts have no email row yet.
   const canContinue =
     campaign.status === "pending_review" &&
@@ -344,12 +346,12 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                       <Button
                         size="sm"
                         onClick={() => handleGenerate()}
-                        variant={canResumeReview ? "outline" : "default"}
+                        variant={canResumeReview || canRetryGeneration ? "outline" : "default"}
                       >
                         <Play className="h-4 w-4" />
                         {campaign.status === "completed"
                           ? "Re-Generate Emails"
-                          : canResumeReview
+                          : canResumeReview || canRetryGeneration
                           ? "Re-Generate All"
                           : "Generate Emails"}
                       </Button>
@@ -468,6 +470,16 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {!campaign.list
                     ? "No contact list is assigned to this campaign. Assign a list and try again."
+                    : campaign.lastGenerationError === "auth"
+                    ? <>
+                        AI API key is invalid or has expired.{" "}
+                        <Link href="/settings?tab=ai" className="underline hover:text-foreground">Update your key in Settings</Link>
+                        {" "}then use <strong>Retry Failed</strong> to resume without losing generated emails.
+                      </>
+                    : campaign.lastGenerationError === "rate_limit"
+                    ? <>
+                        The AI provider rate limit was reached. Wait a few minutes then click <strong>Retry Failed</strong> — already-generated emails are preserved.
+                      </>
                     : campaign.pendingCount > 0
                     ? `${campaign.pendingCount} email${campaign.pendingCount !== 1 ? "s were" : " was"} generated before the error. Resume review to keep them, or re-generate all to start fresh.`
                     : "The AI service returned an error or no eligible contacts were found in the list. Check your AI settings and try again."}

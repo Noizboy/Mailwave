@@ -189,7 +189,19 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code fence
       },
       { signal }
     );
-    content = completion.choices[0]?.message?.content ?? "";
+    const choice = completion.choices[0];
+    content = choice?.message?.content ?? "";
+    const finishReason = choice?.finish_reason ?? "unknown";
+    if (!content && finishReason === "length") {
+      throw new Error(
+        `AI response truncated at token limit (provider: ${input.provider}, model: ${input.model}, finish_reason: length)`
+      );
+    }
+    if (!content) {
+      throw new Error(
+        `AI returned an empty response (provider: ${input.provider}, model: ${input.model}, finish_reason: ${finishReason})`
+      );
+    }
   }
 
   // Strip markdown code fences at the very start/end, then attempt to locate

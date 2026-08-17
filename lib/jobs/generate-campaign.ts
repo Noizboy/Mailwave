@@ -5,6 +5,7 @@ import { getNotifPrefs } from "./notification-prefs";
 import { logger } from "@/lib/logger";
 import {
   buildGenerationContext,
+  classifyGenerationError,
   failGenerationRunAndNotify,
   finalizeGeneration,
   generateForContact,
@@ -46,9 +47,10 @@ export async function processGenerate(job: Job<GenerateCampaignJobData>) {
     // Ensure the campaign never stays stuck in "generating" if an unexpected
     // error occurs. updateMany is guarded by status:"generating" so a
     // concurrent cancel is a no-op rather than being overwritten.
+    const errorCode = err instanceof Error ? classifyGenerationError(err) : "service";
     await prisma.campaign.updateMany({
       where: { id: campaignId, status: "generating" },
-      data: { status: "failed" },
+      data: { status: "failed", lastGenerationError: errorCode },
     }).catch(() => {}); // best-effort — don't mask the original error
     throw err;
   }
@@ -78,7 +80,7 @@ async function runGeneration(
   if (!aiConfig.ok) {
     console.error(`${tag} AI config resolution failed:`, aiConfig.error.message);
     logger.error("ai", `AI config resolution failed for campaign "${campaign.name}"`, { campaignId, error: aiConfig.error.message }, userId);
-    await markCampaignFailed(campaignId);
+    await markCampaignFailed(campaignId, classifyGenerationError(aiConfig.error));
     throw aiConfig.error;
   }
   console.log(`${tag} AI config resolved — provider: ${aiConfig.config.provider}, model: ${aiConfig.config.model}`);
@@ -131,6 +133,7 @@ async function runGeneration(
       // remaining contact. No email row was persisted for this contact.
       console.error(`${tag} Service error — aborting run: ${outcome.error.message}`);
       logger.error("ai", `AI service error — generation aborted for "${campaign.name}"`, { campaignId, error: outcome.error.message }, userId);
+      const errorCode = classifyGenerationError(outcome.error);
       await failGenerationRunAndNotify({
         campaignId,
         userId,
@@ -138,6 +141,7 @@ async function runGeneration(
         title: "AI service unreachable",
         body: `Generation stopped for "${campaign.name}": ${outcome.error.message}. Check your AI configuration and try again.`,
         prefs,
+        errorCode,
       });
       return { successCount, failCount };
     }

@@ -180,8 +180,9 @@ model Campaign {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   systemPrompt    String?
-  nextSendAt      DateTime?
-  activeSendRunId String?
+  nextSendAt           DateTime?
+  activeSendRunId      String?
+  lastGenerationError  String?
 
   list            List?           @relation(fields: [listId], references: [id])
   user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
