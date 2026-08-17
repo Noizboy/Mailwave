@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { isBlocked, recordFailure, resetFailures } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/client-ip";
+import { logger } from "@/lib/logger";
 
 class RateLimitError extends CredentialsSignin {
   code = "rate_limit";
@@ -46,8 +47,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const ipBlock = await isBlocked(ipKey);
         const acctBlock = await isBlocked(accountKey);
-        if (ipBlock.blocked) throw new RateLimitError(`Try again in ${ipBlock.retryAfterSeconds}s`);
-        if (acctBlock.blocked) throw new RateLimitError(`Try again in ${acctBlock.retryAfterSeconds}s`);
+        if (ipBlock.blocked) {
+          logger.warn("auth", "Login rate-limited by IP", { ip, retryAfterSeconds: ipBlock.retryAfterSeconds });
+          throw new RateLimitError(`Try again in ${ipBlock.retryAfterSeconds}s`);
+        }
+        if (acctBlock.blocked) {
+          logger.warn("auth", "Login rate-limited by account", { email: emailKey, retryAfterSeconds: acctBlock.retryAfterSeconds });
+          throw new RateLimitError(`Try again in ${acctBlock.retryAfterSeconds}s`);
+        }
 
         const parsed = parsed0;
         if (!parsed.success) {
@@ -64,6 +71,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           await bcrypt.compare(parsed.data.password, DUMMY_PASSWORD_HASH);
           await recordFailure(ipKey);
           await recordFailure(accountKey);
+          logger.warn("auth", "Login failed — unknown email", { ip });
           return null;
         }
 
@@ -71,11 +79,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!valid) {
           await recordFailure(ipKey);
           await recordFailure(accountKey);
+          logger.warn("auth", "Login failed — wrong password", { ip }, user.id);
           return null;
         }
 
         await resetFailures(ipKey);
         await resetFailures(accountKey);
+        logger.info("auth", "Login successful", { ip }, user.id);
         return { id: user.id, email: user.email, name: user.name };
       },
     }),

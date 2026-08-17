@@ -2,6 +2,7 @@ import { Worker, Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { QUEUE_NAMES } from "./queue";
 import { getNotifPrefs } from "./notification-prefs";
+import { logger } from "@/lib/logger";
 import {
   buildGenerationContext,
   failGenerationRunAndNotify,
@@ -63,6 +64,7 @@ async function runGeneration(
   // --- Stage 1: load campaign + mark generating ---
   const campaign = await loadCampaignForGeneration(campaignId, userId);
   console.log(`${tag} Starting generation for campaign "${campaign.name}"`);
+  logger.info("campaign", `Generation started for "${campaign.name}"`, { campaignId }, userId);
 
   // Fetch notification prefs once for the whole job.
   const prefs: NotifPrefs = await getNotifPrefs(userId, ["ai_email_ready", "ai_email_error"]);
@@ -75,6 +77,7 @@ async function runGeneration(
   const aiConfig = await resolveGenerationAiConfig(userId, campaign);
   if (!aiConfig.ok) {
     console.error(`${tag} AI config resolution failed:`, aiConfig.error.message);
+    logger.error("ai", `AI config resolution failed for campaign "${campaign.name}"`, { campaignId, error: aiConfig.error.message }, userId);
     await markCampaignFailed(campaignId);
     throw aiConfig.error;
   }
@@ -89,6 +92,7 @@ async function runGeneration(
   // No eligible contacts → fail the run and notify (when the pref allows).
   if (contacts.length === 0) {
     console.warn(`${tag} No eligible contacts — aborting`);
+    logger.warn("campaign", `No eligible contacts for campaign "${campaign.name}"`, { campaignId }, userId);
     await failGenerationRunAndNotify({
       campaignId,
       userId,
@@ -121,10 +125,12 @@ async function runGeneration(
     } else if (outcome.kind === "failed") {
       failCount++;
       console.error(`${tag} Contact ${contact.id} (${contact.email}) failed: ${outcome.error.message}`);
+      logger.error("ai", `Email generation failed for contact ${contact.email}`, { campaignId, contactId: contact.id, error: outcome.error.message }, userId);
     } else {
       // Service-level failure: abort the whole run rather than failing every
       // remaining contact. No email row was persisted for this contact.
       console.error(`${tag} Service error — aborting run: ${outcome.error.message}`);
+      logger.error("ai", `AI service error — generation aborted for "${campaign.name}"`, { campaignId, error: outcome.error.message }, userId);
       await failGenerationRunAndNotify({
         campaignId,
         userId,
@@ -144,6 +150,7 @@ async function runGeneration(
 
   // --- Stage 6: finalize → pending_review + completion notification ---
   console.log(`${tag} Generation complete — ${successCount} ok / ${failCount} failed / ${contacts.length} total`);
+  logger.info("campaign", `Generation complete for "${campaign.name}"`, { campaignId, successCount, failCount, total: contacts.length }, userId);
   await finalizeGeneration({
     campaignId,
     userId,

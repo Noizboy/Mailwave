@@ -180,10 +180,12 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code fence
           { role: "user", content: fullPrompt },
         ],
         max_tokens: 2048,
-        // Force JSON output on providers that support the OpenAI response_format
-        // spec (OpenAI, OpenRouter, Gemini via OpenAI-compat). Providers that
-        // ignore or reject this field fall through to the existing parse logic.
-        response_format: { type: "json_object" },
+        // Force JSON output only for providers known to support the OpenAI
+        // response_format spec. Custom/unknown providers are skipped — they may
+        // return an empty response instead of an error when the field is unsupported.
+        ...(input.provider === "openai" || input.provider === "openrouter"
+          ? { response_format: { type: "json_object" as const } }
+          : {}),
       },
       { signal }
     );
@@ -197,6 +199,12 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code fence
     const start = jsonStr.indexOf("{");
     const end = jsonStr.lastIndexOf("}");
     if (start !== -1 && end > start) jsonStr = jsonStr.slice(start, end + 1);
+  }
+
+  if (!jsonStr) {
+    throw new Error(
+      `AI returned an empty response (provider: ${input.provider}, model: ${input.model})`
+    );
   }
 
   let parsed: { subject?: unknown; body?: unknown; personalizationNotes?: unknown };

@@ -16,6 +16,7 @@ model User {
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   aiConfig                AiConfig?
+  apiKeys                 ApiKey[]
   campaigns               Campaign[]
   contacts                Contact[]
   imports                 Import[]
@@ -254,6 +255,34 @@ model NotificationPreference {
   @@unique([userId, eventType])
 }
 
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     LogLevel
+  category  String
+  message   String
+  metadata  Json?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([level])
+  @@index([category])
+  @@index([userId])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  keyHash    String    @unique
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 enum ContactStatus {
   subscribed
   unsubscribed
@@ -329,4 +358,10 @@ enum AiProvider {
   google_gemini
   openrouter
   custom
+}
+
+enum LogLevel {
+  info
+  warn
+  error
 }

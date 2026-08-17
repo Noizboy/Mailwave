@@ -1,0 +1,25 @@
+// @vitest-environment node
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export const runtime = "nodejs";
+
+export async function DELETE(
+  _req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await context.params;
+
+  const key = await prisma.apiKey.findFirst({
+    where: { id, userId: session.user.id, revokedAt: null },
+  });
+  if (!key) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await prisma.apiKey.update({ where: { id }, data: { revokedAt: new Date() } });
+
+  return NextResponse.json({ success: true });
+}

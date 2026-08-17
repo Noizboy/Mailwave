@@ -2,6 +2,7 @@ import { Worker, Job } from "bullmq";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { QUEUE_NAMES } from "./queue";
+import { logger } from "@/lib/logger";
 import { getNotifPrefs } from "./notification-prefs";
 import {
   claimSendRun,
@@ -63,6 +64,7 @@ export async function processSend(job: Job<SendCampaignJobData>): Promise<SendRu
     return { skipped: true, reason: claim.reason };
   }
   const campaign = claim.campaign;
+  logger.info("campaign", `Send run started for "${campaign.name}"`, { campaignId, sendRunId }, userId);
 
   // Fetch notification prefs once — used across the entire job.
   const prefs = await getNotifPrefs(userId, ["campaign_complete", "campaign_error", "email_bounced"]);
@@ -136,9 +138,11 @@ export async function processSend(job: Job<SendCampaignJobData>): Promise<SendRu
       sentCount++;
       rateLimitCounts.sentLastHour++;
       rateLimitCounts.sentLastDay++;
+      logger.info("smtp", `Email sent to ${email.contact.email}`, { campaignId, campaignEmailId: email.id }, userId);
     } else {
       await persistSendFailure(campaignId, email, outcome.error);
       failCount++;
+      logger.error("smtp", `Email failed to ${email.contact.email}: ${outcome.error}`, { campaignId, campaignEmailId: email.id, error: outcome.error }, userId);
       // Bounce notification is debounced and lives outside the delivery
       // transaction so a notification issue cannot roll back delivery state.
       await recordBounceNotificationIfAllowed(userId, campaignId, campaign.name, prefs);
