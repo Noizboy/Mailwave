@@ -120,6 +120,11 @@ export function useCampaignActions(
         "Sending started",
         "Emails are being delivered. Monitor progress on this page."
       );
+      // Optimistic update: reflect "sending" immediately so the progress
+      // section shows "Sending emails…" without waiting for the background refetch.
+      qc.setQueryData(["campaign", campaignId], (old: Record<string, unknown> | undefined) =>
+        old ? { ...old, status: "sending" } : old
+      );
       invalidate();
     } else {
       const errMsg = await parseError(res);
@@ -140,6 +145,10 @@ export function useCampaignActions(
       toast.success(
         "Campaign paused",
         "No more emails will be sent until you resume."
+      );
+      // Optimistic update: reflect "paused" immediately.
+      qc.setQueryData(["campaign", campaignId], (old: Record<string, unknown> | undefined) =>
+        old ? { ...old, status: "paused" } : old
       );
       invalidate();
     } else {

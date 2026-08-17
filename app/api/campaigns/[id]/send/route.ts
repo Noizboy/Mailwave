@@ -48,14 +48,21 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const sendRunId = randomUUID();
   const queue = getSendQueue();
 
-  // For a fresh campaign start, compute the first interval so the first email
-  // is also spaced by the configured interval instead of going out immediately.
-  // For a resumed (paused) campaign we keep the existing nextSendAt.
+  // Compute the delay before the first job fires.
+  // On resume from pause: use the old nextSendAt only if it is still in the
+  // future (respects pacing for a very recent pause). If it is in the past —
+  // which covers the common case where the campaign was paused for a while or
+  // the sending config was changed — start immediately so the new configuration
+  // takes effect right away.
+  // On a fresh start: apply one interval so the first email is also spaced.
   let firstDelayMs = 0;
   let firstNextSendAt: Date;
   if (campaign.status === "paused") {
-    firstNextSendAt = campaign.nextSendAt ?? new Date();
-    firstDelayMs = Math.max(0, firstNextSendAt.getTime() - Date.now());
+    const remainingMs = campaign.nextSendAt
+      ? campaign.nextSendAt.getTime() - Date.now()
+      : 0;
+    firstDelayMs = Math.max(0, remainingMs);
+    firstNextSendAt = firstDelayMs > 0 ? campaign.nextSendAt! : new Date();
   } else {
     const intervalMinutes =
       campaign.intervalType === "random"
