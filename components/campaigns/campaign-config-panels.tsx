@@ -37,6 +37,7 @@ import {
   EMAIL_LENGTH_LABELS,
 } from "./campaign-types";
 import { useCampaignConfigActions } from "./use-campaign-config-actions";
+import { estimateCompletion } from "@/lib/campaign-estimate";
 
 // ---------------------------------------------------------------------------
 // Hour formatting helpers (sending time window)
@@ -446,6 +447,35 @@ export function SendingConfigPanel({
                   </p>
                 )}
             </div>
+            {(() => {
+              const remaining = campaign.approvedCount - campaign.sentCount;
+              const est = estimateCompletion(
+                remaining,
+                campaign.intervalType,
+                campaign.minInterval,
+                campaign.maxInterval,
+                campaign.sendWindowStart,
+                campaign.sendWindowEnd,
+                campaign.dailyLimit
+              );
+              if (!est) return null;
+              return (
+                <>
+                  <Separator />
+                  <InfoField label="EST. COMPLETION">
+                    <div className="flex items-baseline gap-2">
+                      <span>~{est.daysNeeded} {est.daysNeeded === 1 ? "day" : "days"}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {est.estimatedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      ~{est.emailsPerDay} emails/day · {remaining} remaining
+                    </p>
+                  </InfoField>
+                </>
+              );
+            })()}
           </div>
         )}
       </div>

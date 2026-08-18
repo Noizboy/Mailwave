@@ -52,6 +52,7 @@ export interface CampaignDetail {
   maxInterval: number;
   sendWindowStart: number | null;
   sendWindowEnd: number | null;
+  dailyLimit: number;
   startedAt: string | null;
   nextSendAt: string | null;
   updatedAt: string;

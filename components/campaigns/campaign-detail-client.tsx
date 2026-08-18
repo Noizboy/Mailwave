@@ -19,6 +19,7 @@ import {
   Clock,
   MinusCircle,
   Trash2,
+  CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -29,6 +30,7 @@ import {
   CampaignDetail,
   getNextEmailLabel,
 } from "./campaign-types";
+import { estimateCompletion } from "@/lib/campaign-estimate";
 import { CampaignDetailsPanel } from "./campaign-config-panels";
 import { SendingConfigPanel } from "./campaign-config-panels";
 import { EmailReview } from "./email-review";
@@ -547,24 +549,53 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                   </span>
                 </div>
                 <Progress value={percent} className="h-2" />
-                {nextEmailLabel && (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {nextEmailLabel === "Sending now" ? (
-                      <>
-                        <span className="relative flex h-2 w-2 shrink-0">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-                        </span>
-                        <span>Sending now</span>
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="h-3 w-3 shrink-0" />
-                        <span>{nextEmailLabel}</span>
-                      </>
-                    )}
-                  </div>
-                )}
+                {(() => {
+                  const remaining = campaign.approvedCount - campaign.sentCount;
+                  const est = ["sending", "paused"].includes(campaign.status)
+                    ? estimateCompletion(
+                        remaining,
+                        campaign.intervalType,
+                        campaign.minInterval,
+                        campaign.maxInterval,
+                        campaign.sendWindowStart,
+                        campaign.sendWindowEnd,
+                        campaign.dailyLimit
+                      )
+                    : null;
+                  if (!nextEmailLabel && !est) return null;
+                  return (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        {nextEmailLabel === "Sending now" ? (
+                          <>
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                            </span>
+                            <span>Sending now</span>
+                          </>
+                        ) : nextEmailLabel ? (
+                          <>
+                            <Clock className="h-3 w-3 shrink-0" />
+                            <span>{nextEmailLabel}</span>
+                          </>
+                        ) : null}
+                      </div>
+                      {est && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <CalendarClock className="h-3 w-3 shrink-0" />
+                          <span>
+                            Est. done{" "}
+                            <span className="font-medium text-foreground">
+                              {est.estimatedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </span>
+                            {" "}· ~{est.daysNeeded}d
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
