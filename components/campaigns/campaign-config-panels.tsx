@@ -279,8 +279,7 @@ export function CampaignDetailsPanel({
             <div className="space-y-1.5">
               <Label>System Prompt</Label>
               <p className="text-xs text-muted-foreground">
-                Optional. Override or extend the default AI behavior with your
-                own rules.
+                Override or extend the default AI behavior with your own rules.
               </p>
               <Textarea
                 value={systemPrompt}
