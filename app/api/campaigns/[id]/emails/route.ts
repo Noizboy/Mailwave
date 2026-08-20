@@ -56,33 +56,41 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     ],
   };
 
-  const emails = await prisma.campaignEmail.findMany({
-    where,
-    include: {
-      contact: {
-        select: {
-          id: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          company: true,
-          jobTitle: true,
-          status: true,
+  const [emails, total, sendingAccount] = await Promise.all([
+    prisma.campaignEmail.findMany({
+      where,
+      include: {
+        contact: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            company: true,
+            jobTitle: true,
+            status: true,
+            emailsSentCount: true,
+          },
+        },
+        deliveryEvents: {
+          where: { eventType: "opened" },
+          select: { occurredAt: true },
+          orderBy: { occurredAt: "asc" },
+          take: 20,
         },
       },
-      deliveryEvents: {
-        where: { eventType: "opened" },
-        select: { occurredAt: true },
-        orderBy: { occurredAt: "asc" },
-        take: 20,
-      },
-    },
-    orderBy: { createdAt: "asc" },
-    skip: (page - 1) * perPage,
-    take: perPage,
-  });
+      orderBy: { createdAt: "asc" },
+      skip: (page - 1) * perPage,
+      take: perPage,
+    }),
+    prisma.campaignEmail.count({ where }),
+    prisma.sendingAccount.findUnique({
+      where: { userId: user.id },
+      select: { suppressAfterEmails: true },
+    }),
+  ]);
 
-  const total = await prisma.campaignEmail.count({ where });
+  const suppressAfterEmails = sendingAccount?.suppressAfterEmails ?? 3;
 
   // An "opened" event only counts as a real human open if it arrived at least
   // 15 s after sentAt. Events within that window are likely scanner / proxy
@@ -98,5 +106,5 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       ),
   }));
 
-  return NextResponse.json({ emails: emailsWithOpened, total, page, pageSize: perPage });
+  return NextResponse.json({ emails: emailsWithOpened, total, page, pageSize: perPage, suppressAfterEmails });
 }

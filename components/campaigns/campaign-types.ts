@@ -8,6 +8,7 @@ export interface ContactSnippet {
   company: string | null;
   jobTitle: string | null;
   status: string | null;
+  emailsSentCount: number;
 }
 
 export interface EmailRow {

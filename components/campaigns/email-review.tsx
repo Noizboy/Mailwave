@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,17 +59,49 @@ function filterToQueryString(filter: string): string {
   }
 }
 
+// ponytail: mirrors variant logic in contacts-table.tsx; if max changes per-contact someday, lift this into a shared component.
+function sendCountVariant(sentCount: number, max: number) {
+  if (sentCount === 0) return "neutral" as const;
+  if (sentCount >= max) return "destructive" as const;
+  if (sentCount >= Math.ceil(max * 0.8)) return "warning" as const;
+  return "success" as const;
+}
+
+function SendCountBadge({ sentCount, max }: { sentCount: number; max: number }) {
+  if (max <= 0) return null;
+  const atLimit = sentCount >= max;
+  const label = atLimit
+    ? `Contact suppressed: ${sentCount}/${max} emails sent (limit reached).`
+    : `${sentCount}/${max} emails sent to this contact. Suppressed at ${max}.`;
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant={sendCountVariant(sentCount, max)}
+            className="shrink-0 cursor-help normal-case font-mono tracking-normal text-[10px]"
+          >
+            {sentCount}/{max}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top">{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 async function fetchEmailPage(
   campaignId: string,
   page: number,
   filter: string,
   search: string
-): Promise<{ emails: EmailRow[]; total: number }> {
+): Promise<{ emails: EmailRow[]; total: number; suppressAfterEmails: number }> {
   const filterQ = filterToQueryString(filter);
   const url = `/api/campaigns/${campaignId}/emails?page=${page}&perPage=${PER_PAGE}${filterQ ? `&${filterQ}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to load emails");
-  return res.json();
+  const json = await res.json();
+  return { emails: json.emails, total: json.total, suppressAfterEmails: json.suppressAfterEmails ?? 3 };
 }
 
 // ---------------------------------------------------------------------------
@@ -102,6 +136,7 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
 
   const emails = emailsData?.emails ?? [];
   const totalFiltered = emailsData?.total ?? 0;
+  const suppressAfterEmails = emailsData?.suppressAfterEmails ?? 3;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / PER_PAGE));
 
   const {
@@ -420,8 +455,14 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">
-                        {name}
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-medium text-foreground">
+                          {name}
+                        </span>
+                        <SendCountBadge
+                          sentCount={email.contact.emailsSentCount ?? 0}
+                          max={suppressAfterEmails}
+                        />
                       </div>
                       {(email.contact.firstName ||
                         email.contact.lastName) && (
