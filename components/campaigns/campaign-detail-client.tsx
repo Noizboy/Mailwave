@@ -211,7 +211,6 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   // ---- Derived state ----
 
   const reviewPendingCount = campaign.approvalPendingCount;
-  const rejectedCount = campaign.rejectedCount;
   const approvedCount = campaign.approvedCount;
 
   const canGenerate = ["pending", "failed"].includes(campaign.status) && !!campaign.list;
@@ -226,12 +225,11 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
     campaign.totalEmails > 0 &&
     campaign.emails.length < campaign.totalEmails;
   const canRegenerate =
-    ["pending_review", "ready_to_send"].includes(campaign.status);
+    ["pending_review", "ready_to_send", "paused"].includes(campaign.status);
   const allReviewed =
     campaign.emails.length > 0 &&
     campaign.status === "pending_review" &&
     reviewPendingCount === 0 &&
-    rejectedCount === 0 &&
     approvedCount > 0;
   const canApprove = campaign.status === "pending_review" && !allReviewed;
   const canSend =
@@ -381,11 +379,17 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                     {canRegenerate && (
                       <Button
                         size="sm"
-                        onClick={() => handleGenerate()}
+                        onClick={() =>
+                          campaign.status === "paused"
+                            ? handleGenerate("regenerate_approved")
+                            : handleGenerate()
+                        }
                         variant="outline"
                       >
                         <RefreshCw className="h-4 w-4" />
-                        Re-Generate Emails
+                        {campaign.status === "paused"
+                          ? "Re-Generate Approved"
+                          : "Re-Generate Emails"}
                       </Button>
                     )}
                     {canApprove && (

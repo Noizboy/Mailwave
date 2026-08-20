@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const campaign = await findOwnedCampaign(id, user.id);
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (["generating", "sending", "paused"].includes(campaign.status)) {
+  if (["generating", "sending"].includes(campaign.status)) {
     return NextResponse.json(
       { error: `Cannot generate from status: ${campaign.status}` },
       { status: 409 }
@@ -60,7 +60,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = await req.json().catch(() => ({}));
   const mode: string | undefined = body?.mode;
 
-  if (mode === "retry_failed") {
+  if (mode === "regenerate_approved") {
+    // Delete only approved emails that haven't been sent yet so that already-sent
+    // emails (including opened ones, which also have status "sent") are preserved.
+    // The worker's isAlreadyHandled skips contacts with a "sent" row naturally.
+    await prisma.campaignEmail.deleteMany({
+      where: {
+        campaignId: campaign.id,
+        approvalStatus: "approved",
+        status: { notIn: ["sent", "sending"] },
+      },
+    });
+    await prisma.campaign.update({
+      where: { id: campaign.id },
+      data: { activeSendRunId: null, nextSendAt: null },
+    });
+  } else if (mode === "retry_failed") {
     // Reset failed AND still-pending emails; successfully generated ones are kept.
     // Pending emails (never generated) are included so that any partially-run
     // generation doesn't leave un-generated contacts behind after a retry.

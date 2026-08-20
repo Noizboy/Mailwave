@@ -44,7 +44,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     pendingCount: metrics.pendingCount,
     approvalPendingCount: metrics.approvalPendingCount,
     approvedCount: metrics.approvedCount,
-    rejectedCount: metrics.rejectedCount,
+    approvedUnsentCount: metrics.approvedUnsentCount,
   });
 }
 

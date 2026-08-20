@@ -10,7 +10,7 @@ export type CampaignDerivedMetrics = {
   pendingCount: number;
   approvalPendingCount: number;
   approvedCount: number;
-  rejectedCount: number;
+  approvedUnsentCount: number;
 };
 
 export function deriveCampaignMetrics(emails: CampaignEmailMetricInput[]): CampaignDerivedMetrics {
@@ -20,7 +20,7 @@ export function deriveCampaignMetrics(emails: CampaignEmailMetricInput[]): Campa
   let pendingCount = 0;
   let approvalPendingCount = 0;
   let approvedCount = 0;
-  let rejectedCount = 0;
+  let approvedUnsentCount = 0;
 
   for (const email of emails) {
     if (email.status === "sent") sentCount++;
@@ -29,7 +29,7 @@ export function deriveCampaignMetrics(emails: CampaignEmailMetricInput[]): Campa
     if (email.status === "approved" && email.approvalStatus !== "skipped") pendingCount++;
     if (email.approvalStatus === "pending" && email.status === "generated") approvalPendingCount++;
     if (email.approvalStatus === "approved") approvedCount++;
-    if (email.approvalStatus === "rejected") rejectedCount++;
+    if (email.approvalStatus === "approved" && email.status === "generated") approvedUnsentCount++;
   }
 
   return {
@@ -39,6 +39,6 @@ export function deriveCampaignMetrics(emails: CampaignEmailMetricInput[]): Campa
     pendingCount,
     approvalPendingCount,
     approvedCount,
-    rejectedCount,
+    approvedUnsentCount,
   };
 }

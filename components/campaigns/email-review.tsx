@@ -49,8 +49,7 @@ function filterToQueryString(filter: string): string {
   switch (filter) {
     case "sent": return "status=sent";
     case "pending": return "status=generated&approvalStatus=pending";
-    case "approved": return "approvalStatus=approved";
-    case "rejected": return "approvalStatus=rejected";
+    case "approved": return "approvalStatus=approved&status=generated";
     case "skipped": return "approvalStatus=skipped";
     case "failed_gen": return "status=failed";
     default: return "";
@@ -118,8 +117,7 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
     { key: "all", label: `All (${campaign.emails.length})` },
     { key: "sent", label: `Sent (${campaign.sentCount})` },
     { key: "pending", label: `Pending (${campaign.approvalPendingCount})` },
-    { key: "approved", label: `Approved (${campaign.approvedCount})` },
-    { key: "rejected", label: `Rejected (${campaign.rejectedCount})` },
+    { key: "approved", label: `Approved (${campaign.approvedUnsentCount})` },
     { key: "skipped", label: `Skipped (${campaign.skippedCount})` },
     { key: "failed_gen", label: `Failed (${campaign.failedCount})` },
   ];
