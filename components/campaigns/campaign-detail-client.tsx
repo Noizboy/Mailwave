@@ -15,6 +15,7 @@ import {
   XCircle,
   Send,
   Mail,
+  Inbox,
   AlertTriangle,
   Clock,
   MinusCircle,
@@ -257,6 +258,15 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
       ? Math.round((generatedCount / campaign.totalEmails) * 100)
       : 0;
 
+  // ponytail: totalEmails is a denormalized counter set at create/generate-cancel
+  // time; if the list shrinks between generation and read it could dip below
+  // emails.length, so clamp at 0. Upgrade path: recompute from live list member
+  // count on read (heavier query; denormalized counter is the existing pattern).
+  const notGeneratedCount = Math.max(
+    0,
+    campaign.totalEmails - campaign.emails.length
+  );
+
   const nextEmailLabel = getNextEmailLabel(campaign, nowMs);
 
   const stats: Array<{
@@ -272,6 +282,13 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
       tone: "neutral",
       icon: <Mail className="h-5 w-5 text-blue-600" />,
       iconBg: "bg-blue-100",
+    },
+    {
+      label: "Not Generated",
+      value: notGeneratedCount,
+      tone: "neutral",
+      icon: <Inbox className="h-5 w-5 text-violet-600" />,
+      iconBg: "bg-violet-100",
     },
     {
       label: "Sent",
@@ -448,7 +465,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
           </div>
 
           {/* Stats grid */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
             {stats.map((s) => (
               <StatChip
                 key={s.label}
