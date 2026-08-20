@@ -49,7 +49,7 @@ function filterToQueryString(filter: string): string {
   switch (filter) {
     case "sent": return "status=sent";
     case "pending": return "status=generated&approvalStatus=pending";
-    case "approved": return "approvalStatus=approved&status=generated";
+    case "approved": return "status=approved";
     case "skipped": return "approvalStatus=skipped";
     case "failed_gen": return "status=failed";
     default: return "";
