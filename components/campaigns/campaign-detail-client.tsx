@@ -379,11 +379,7 @@ export function CampaignDetailClient({ campaignId }: { campaignId: string }) {
                     {canRegenerate && (
                       <Button
                         size="sm"
-                        onClick={() =>
-                          campaign.status === "paused"
-                            ? handleGenerate("regenerate_approved")
-                            : handleGenerate()
-                        }
+                        onClick={() => handleGenerate("regenerate_approved")}
                         variant="outline"
                       >
                         <RefreshCw className="h-4 w-4" />

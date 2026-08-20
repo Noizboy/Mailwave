@@ -197,6 +197,56 @@ describe("api/campaigns", () => {
       );
     });
 
+    it("regenerate_approved deletes only approved unsent emails, preserving sent/sending", async () => {
+      mocked(prisma.campaign.findFirst).mockResolvedValue(campaign as never);
+      mocked(prisma.aiConfig.findFirst).mockResolvedValue({ id: "ai-1" } as never);
+      mocked(prisma.campaignEmail.deleteMany).mockResolvedValue({ count: 1 } as never);
+      mocked(prisma.campaign.update).mockResolvedValue({} as never);
+
+      const res = await generateCampaign(
+        jsonRequest("/api/campaigns/camp-1/generate", {
+          method: "POST",
+          body: { mode: "regenerate_approved" },
+        }),
+        routeParams({ id: "camp-1" })
+      );
+
+      expect(res.status).toBe(200);
+      expect(prisma.campaignEmail.deleteMany).toHaveBeenCalledWith({
+        where: {
+          campaignId: "camp-1",
+          approvalStatus: "approved",
+          status: { notIn: ["sent", "sending"] },
+        },
+      });
+    });
+
+    it("default re-generate deletes unsent emails only, preserving sent/sending", async () => {
+      mocked(prisma.campaign.findFirst).mockResolvedValue(campaign as never);
+      mocked(prisma.aiConfig.findFirst).mockResolvedValue({ id: "ai-1" } as never);
+      mocked(prisma.campaignEmail.deleteMany).mockResolvedValue({ count: 1 } as never);
+      mocked(prisma.campaign.update).mockResolvedValue({} as never);
+
+      const res = await generateCampaign(
+        jsonRequest("/api/campaigns/camp-1/generate", { method: "POST" }),
+        routeParams({ id: "camp-1" })
+      );
+
+      expect(res.status).toBe(200);
+      expect(prisma.campaignEmail.deleteMany).toHaveBeenCalledWith({
+        where: {
+          campaignId: "camp-1",
+          NOT: { approvalStatus: "skipped" },
+          status: { notIn: ["sent", "sending"] },
+        },
+      });
+      expect(prisma.campaign.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.not.objectContaining({ sentCount: 0, skippedCount: 0 }),
+        })
+      );
+    });
+
     // SEC-004: more than 3 generation requests/min/user from the same user
     // return 429 without enqueuing jobs.
     it("returns 429 once the 3/min per-user quota is exceeded", async () => {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { getAuthenticatedUser } from "@/lib/api/session";
@@ -21,6 +22,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const url = new URL(req.url);
   const approvalStatusRaw = url.searchParams.get("approvalStatus");
   const statusRaw = url.searchParams.get("status");
+  const search = url.searchParams.get("search")?.trim();
   const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
   const perPage = Math.min(100, Math.max(1, parseInt(url.searchParams.get("perPage") ?? "50")));
 
@@ -36,16 +38,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const approvalStatus = approvalStatusParsed?.data;
   const status = statusParsed?.data;
 
+  const where: Prisma.CampaignEmailWhereInput = {
+    AND: [
+      { campaignId: id },
+      { OR: [{ status: "sent" }, { contact: { status: { not: "suppressed" } } }] },
+      ...(approvalStatus ? [{ approvalStatus }] : []),
+      ...(status ? [{ status }] : []),
+      ...(search
+        ? [{
+            OR: [
+              { contact: { firstName: { contains: search, mode: "insensitive" as const } } },
+              { contact: { lastName: { contains: search, mode: "insensitive" as const } } },
+              { contact: { email: { contains: search, mode: "insensitive" as const } } },
+            ],
+          }]
+        : []),
+    ],
+  };
+
   const emails = await prisma.campaignEmail.findMany({
-    where: {
-      campaignId: id,
-      OR: [
-        { status: "sent" },
-        { contact: { status: { not: "suppressed" } } },
-      ],
-      ...(approvalStatus ? { approvalStatus } : {}),
-      ...(status ? { status } : {}),
-    },
+    where,
     include: {
       contact: {
         select: {
@@ -70,17 +82,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     take: perPage,
   });
 
-  const total = await prisma.campaignEmail.count({
-    where: {
-      campaignId: id,
-      OR: [
-        { status: "sent" },
-        { contact: { status: { not: "suppressed" } } },
-      ],
-      ...(approvalStatus ? { approvalStatus } : {}),
-      ...(status ? { status } : {}),
-    },
-  });
+  const total = await prisma.campaignEmail.count({ where });
 
   // An "opened" event only counts as a real human open if it arrived at least
   // 15 s after sentAt. Events within that window are likely scanner / proxy

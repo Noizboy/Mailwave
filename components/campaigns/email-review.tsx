@@ -14,6 +14,7 @@ import {
   XCircle,
   Clock,
   Sparkles,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -59,10 +60,11 @@ function filterToQueryString(filter: string): string {
 async function fetchEmailPage(
   campaignId: string,
   page: number,
-  filter: string
+  filter: string,
+  search: string
 ): Promise<{ emails: EmailRow[]; total: number }> {
   const filterQ = filterToQueryString(filter);
-  const url = `/api/campaigns/${campaignId}/emails?page=${page}&perPage=${PER_PAGE}${filterQ ? `&${filterQ}` : ""}`;
+  const url = `/api/campaigns/${campaignId}/emails?page=${page}&perPage=${PER_PAGE}${filterQ ? `&${filterQ}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to load emails");
   return res.json();
@@ -83,6 +85,7 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
   const [sidebarFilter, setSidebarFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -91,8 +94,8 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
   const isSending = ["sending", "paused"].includes(campaign.status);
 
   const { data: emailsData, isLoading: emailsLoading } = useQuery({
-    queryKey: ["campaign-emails", campaignId, page, sidebarFilter],
-    queryFn: () => fetchEmailPage(campaignId, page, sidebarFilter),
+    queryKey: ["campaign-emails", campaignId, page, sidebarFilter, search],
+    queryFn: () => fetchEmailPage(campaignId, page, sidebarFilter, search),
     enabled: campaign.emails.length > 0 || isGenerating,
     refetchInterval: isGenerating || campaign.status === "sending" ? 3000 : false,
   });
@@ -235,6 +238,22 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
                 ))}
               </TabsList>
             </Tabs>
+          </div>
+
+          <div className="border-b p-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search by name or email…"
+                className="pl-9"
+                aria-label="Search emails by name or email"
+              />
+            </div>
           </div>
 
           {/* Bulk action bar */}
