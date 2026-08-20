@@ -15,6 +15,7 @@ import {
   Clock,
   Sparkles,
   Search,
+  Inbox,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -55,6 +56,7 @@ function filterToQueryString(filter: string): string {
     case "approved": return "status=approved";
     case "skipped": return "approvalStatus=skipped";
     case "failed_gen": return "status=failed";
+    case "not_generated": return "status=not_generated";
     default: return "";
   }
 }
@@ -130,7 +132,7 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
   const { data: emailsData, isLoading: emailsLoading } = useQuery({
     queryKey: ["campaign-emails", campaignId, page, sidebarFilter, search],
     queryFn: () => fetchEmailPage(campaignId, page, sidebarFilter, search),
-    enabled: campaign.emails.length > 0 || isGenerating,
+    enabled: campaign.emails.length > 0 || isGenerating || sidebarFilter === "not_generated",
     refetchInterval: isGenerating || campaign.status === "sending" ? 3000 : false,
   });
 
@@ -151,6 +153,10 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
   } = useEmailActions(campaignId);
 
   // Tab counts come from campaign-level metrics (accurate across all pages)
+  // ponytail: notGeneratedCount is computed client-side from totalEmails
+  // (denormalized list member count) minus emails.length (all email rows).
+  // If the list shrinks between generation and read, clamp at 0.
+  const notGeneratedCount = Math.max(0, campaign.totalEmails - campaign.emails.length);
   const FILTER_TABS = [
     { key: "all", label: `All (${campaign.emails.length})` },
     { key: "sent", label: `Sent (${campaign.sentCount})` },
@@ -158,13 +164,14 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
     { key: "approved", label: `Approved (${campaign.approvedUnsentCount})` },
     { key: "skipped", label: `Skipped (${campaign.skippedCount})` },
     { key: "failed_gen", label: `Failed (${campaign.failedCount})` },
+    { key: "not_generated", label: `Not Generated (${notGeneratedCount})` },
   ];
 
   const selected =
     emails.find((e) => e.id === selectedId) ?? emails[0] ?? null;
 
   const canBulkSelect =
-    !isSending && campaign.status !== "completed" && emails.length > 0;
+    !isSending && campaign.status !== "completed" && emails.length > 0 && sidebarFilter !== "not_generated";
   const allPageSelected =
     emails.length > 0 && emails.every((e) => selectedIds.has(e.id));
   const somePageSelected = emails.some((e) => selectedIds.has(e.id));
@@ -377,7 +384,10 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
 
                 let approvalLabel = email.approvalStatus.toUpperCase();
                 let approvalBg = "bg-amber-100 text-amber-700";
-                if (email.status === "failed") {
+                if (email.status === "not_generated") {
+                  approvalLabel = "NOT GENERATED";
+                  approvalBg = "bg-violet-100 text-violet-700";
+                } else if (email.status === "failed") {
                   approvalLabel = "FAILED";
                   approvalBg = "bg-destructive/10 text-destructive";
                 } else if (email.status === "sent") {
@@ -615,7 +625,19 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
               )}
 
               {/* Preview / edit */}
-              {editMode && campaign.status !== "sending" ? (
+              {selected.status === "not_generated" ? (
+                <div className="rounded-xl border bg-card p-6 text-center">
+                  <Inbox className="h-8 w-8 text-violet-500 mx-auto mb-3" />
+                  <p className="text-sm font-semibold text-foreground">
+                    No email generated
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    This contact has no generated email yet. Use{" "}
+                    <strong>Continue Generating</strong> or{" "}
+                    <strong>Re-Generate</strong> to create it.
+                  </p>
+                </div>
+              ) : editMode && campaign.status !== "sending" ? (
                 <div className="rounded-xl border bg-card space-y-4 p-4">
                   <div className="space-y-1.5">
                     <Label>Subject</Label>
@@ -693,6 +715,7 @@ export function EmailReview({ campaign, campaignId }: EmailReviewProps) {
 
               {/* Per-email actions */}
               {!editMode &&
+                selected.status !== "not_generated" &&
                 selected.contact.status !== "suppressed" &&
                 campaign.status !== "sending" &&
                 campaign.status !== "completed" && (

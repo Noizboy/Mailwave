@@ -63,16 +63,12 @@ export type GenerationContext = {
  * so the orchestrator can count, persist, and decide aborts uniformly.
  *
  *  - `generated`: AI call succeeded and the email row was upserted.
- *  - `failed`:    a per-contact error (e.g. bad JSON) — a failed email row was
- *                  persisted and the batch should continue.
- *  - `service-error`: the AI provider is unreachable/rate-limited/unauthorized
- *                  — no email row is persisted; the orchestrator must abort
- *                  the whole run rather than failing every remaining contact.
+ *  - `failed`:    any error (per-contact or service-level) — a failed email row
+ *                  was persisted and the batch continues with the next contact.
  */
 export type ContactOutcome =
   | { kind: "generated" }
-  | { kind: "failed"; error: Error }
-  | { kind: "service-error"; error: Error };
+  | { kind: "failed"; error: Error };
 
 export type ResolveGenerationAiConfigResult =
   | { ok: true; config: ResolvedAiConfig }
@@ -301,13 +297,6 @@ export async function generateForContact(
 
       return { kind: "generated" };
     } catch (err) {
-      // If the AI service itself is unreachable/timed out/rate-limited, abort
-      // early — no point retrying every remaining contact. No email row is
-      // persisted for this contact; the orchestrator marks the campaign failed.
-      if (isServiceError(err)) {
-        return { kind: "service-error", error: err instanceof Error ? err : new Error("Unknown error") };
-      }
-
       lastErr = err instanceof Error ? err : new Error("Unknown error");
 
       if (attempt < CONTACT_MAX_RETRIES) {

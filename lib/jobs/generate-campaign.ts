@@ -124,26 +124,10 @@ async function runGeneration(
 
     if (outcome.kind === "generated") {
       successCount++;
-    } else if (outcome.kind === "failed") {
+    } else {
       failCount++;
       console.error(`${tag} Contact ${contact.id} (${contact.email}) failed: ${outcome.error.message}`);
       logger.error("ai", `Email generation failed for contact ${contact.email}`, { campaignId, contactId: contact.id, error: outcome.error.message, provider: aiConfig.config.provider, model: aiConfig.config.model }, userId);
-    } else {
-      // Service-level failure: abort the whole run rather than failing every
-      // remaining contact. No email row was persisted for this contact.
-      console.error(`${tag} Service error — aborting run: ${outcome.error.message}`);
-      logger.error("ai", `AI service error — generation aborted for "${campaign.name}"`, { campaignId, error: outcome.error.message }, userId);
-      const errorCode = classifyGenerationError(outcome.error);
-      await failGenerationRunAndNotify({
-        campaignId,
-        userId,
-        campaignName: campaign.name,
-        title: "AI service unreachable",
-        body: `Generation stopped for "${campaign.name}": ${outcome.error.message}. Check your AI configuration and try again.`,
-        prefs,
-        errorCode,
-      });
-      return { successCount, failCount };
     }
 
     // Report progress after each contact.

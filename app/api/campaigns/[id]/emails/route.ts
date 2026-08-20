@@ -8,7 +8,7 @@ import { findOwnedCampaign } from "@/lib/api/ownership";
 export const runtime = "nodejs";
 
 const approvalStatusSchema = z.enum(["pending", "approved", "rejected", "skipped"]);
-const emailStatusSchema = z.enum(["pending", "generated", "approved", "rejected", "skipped", "sending", "sent", "failed"]);
+const emailStatusSchema = z.enum(["pending", "generated", "approved", "rejected", "skipped", "sending", "sent", "failed", "not_generated"]);
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthenticatedUser();
@@ -37,6 +37,68 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const approvalStatus = approvalStatusParsed?.data;
   const status = statusParsed?.data;
+
+  // "not_generated" is a synthetic filter: contacts in the campaign's list
+  // that have no CampaignEmail row yet (generation cancelled or failed
+  // mid-way). We query ListMember and return EmailRow-shaped objects with
+  // a sentinel status so the frontend can render them alongside real emails.
+  if (status === "not_generated") {
+    const sendingAccount = await prisma.sendingAccount.findUnique({
+      where: { userId: user.id },
+      select: { suppressAfterEmails: true },
+    });
+    const suppressAfterEmails = sendingAccount?.suppressAfterEmails ?? 3;
+
+    if (!campaign.listId) {
+      return NextResponse.json({ emails: [], total: 0, page, pageSize: perPage, suppressAfterEmails });
+    }
+
+    const notGenWhere = {
+      listId: campaign.listId,
+      contact: {
+        userId: user.id,
+        status: { not: "suppressed" as const },
+        campaignEmails: { none: { campaignId: id } },
+        ...(search ? {
+          OR: [
+            { firstName: { contains: search, mode: "insensitive" as const } },
+            { lastName: { contains: search, mode: "insensitive" as const } },
+            { email: { contains: search, mode: "insensitive" as const } },
+          ],
+        } : {}),
+      },
+    };
+
+    const [members, total] = await Promise.all([
+      prisma.listMember.findMany({
+        where: notGenWhere,
+        include: {
+          contact: {
+            select: { id: true, email: true, firstName: true, lastName: true, company: true, jobTitle: true, status: true, emailsSentCount: true },
+          },
+        },
+        orderBy: { addedAt: "asc" },
+        skip: (page - 1) * perPage,
+        take: perPage,
+      }),
+      prisma.listMember.count({ where: notGenWhere }),
+    ]);
+
+    const syntheticEmails = members.map((m) => ({
+      id: `not-gen-${m.contactId}`,
+      subject: null,
+      body: null,
+      personalizationNotes: null,
+      approvalStatus: "pending" as const,
+      status: "not_generated" as const,
+      errorReason: null,
+      sentAt: null,
+      opened: false,
+      contact: m.contact,
+    }));
+
+    return NextResponse.json({ emails: syntheticEmails, total, page, pageSize: perPage, suppressAfterEmails });
+  }
 
   const where: Prisma.CampaignEmailWhereInput = {
     AND: [
