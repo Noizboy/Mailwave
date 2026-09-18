@@ -28,6 +28,7 @@ vi.mock("@/lib/prisma", () => {
     contact: { update: vi.fn() },
     notification: { create: vi.fn(), findFirst: vi.fn() },
     notificationPreference: { findMany: vi.fn() },
+    systemLog: { create: vi.fn().mockResolvedValue({}) },
   };
   // Stages persist outcomes inside prisma.$transaction; run the callback
   // against the same mocked client so per-model call assertions still hold.

@@ -194,6 +194,18 @@ export function startSendWorker() {
 
   worker.on("failed", (job, err) => {
     console.error(`Send job ${job?.id} failed:`, err.message);
+    logger.error(
+      "campaign",
+      `Send job ${job?.id ?? "unknown"} failed: ${err.message}`,
+      {
+        campaignId: job?.data.campaignId,
+        sendRunId: job?.data.sendRunId,
+        jobId: job?.id,
+        error: err.message,
+        stack: err.stack,
+      },
+      job?.data.userId
+    );
   });
 
   return worker;
